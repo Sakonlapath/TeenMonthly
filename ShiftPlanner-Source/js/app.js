@@ -3,6 +3,8 @@ const $=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,
 let state=clone(SEED),history=[],currentView='schedule',editing=null,choice='',toastTimer;
 const STORE='card-room-planner-v1';
 try{let raw=localStorage.getItem(STORE);if(raw){let v=JSON.parse(raw);validateBackup(v);state=v}}catch(e){setTimeout(()=>toast('เปิดข้อมูลที่บันทึกไม่ได้ ใช้ข้อมูลตั้งต้นแทน'),300)}
+const removedLegacySample=isLegacyOctoberSample(state.months['2026-10']);
+if(removedLegacySample){checkpoint();state.months['2026-10']=freshMonth('2026-10');state.source=SEED.source}
 if(!state.payRates)state.payRates=clone(DEFAULT_PAY_RATES);
 state.pairExclusions=clone(DEFAULT_PAIR_EXCLUSIONS);
 if(!state.mainStaffIds)state.mainStaffIds=clone(MAIN_STAFF_IDS);
@@ -26,12 +28,12 @@ function totalEditor(p,total){
 function render(){
  const month=state.selected,m=activeMonth(),n=daysIn(month),report=audit(state,month),tt=report.totals;
  $('monthPicker').value=month;$('monthTitle').textContent=monthLabel(month);$('summaryMonth').textContent='· '+monthLabel(month);
- $('sourceNote').textContent=month==='2026-10'?'ข้อมูลตั้งต้นจากชีต ต.ค.69 · ตารางด้านขวา':'ตารางประจำเดือน · กรุณาเพิ่มวันหยุดราชการของเดือนนี้';
+ $('sourceNote').textContent='ตารางประจำเดือน · กรุณาเพิ่มวันหยุดราชการของเดือนนี้';
  $('undoBtn').disabled=!history.length;
  let req=Object.values(m.days).reduce((s,x)=>s+CODES.reduce((a,c)=>a+x.need[c],0),0),assigned=tt.reduce((s,x)=>s+x.total,0);
  const enteredTargets=quotaTargets(state,month),targetTotal=Object.values(enteredTargets).reduce((a,v)=>a+v,0);
  let coverage=report.issues.filter(i=>i.type==='coverage').length;
- $('cards').innerHTML='<div class="card"><div class="label">บุคลากรในตาราง</div><strong>'+state.people.filter(p=>p.active).length+'</strong> <small>คน</small></div><div class="card"><div class="label">เวรที่จัด / ต้องการ</div><strong>'+assigned+'</strong> <small>/ <span id="quotaTotal">'+targetTotal+'</span> เวร</small><div class="total-hint">รวมจำนวนที่กรอกในช่อง “รวม”</div></div><div class="card accent"><div class="label">เวรรวม คนลำดับ 2–4</div><strong>'+report.groupCounts.join(' · ')+'</strong> <small>ครั้ง</small></div><div class="card"><div class="label">รายการที่ต้องตรวจ</div><strong>'+report.issues.length+'</strong> <small>รายการ</small></div>';
+ $('cards').innerHTML='<div class="card"><div class="label">บุคลากรในตาราง</div><strong>'+state.people.filter(p=>p.active).length+'</strong> <small>คน</small></div><div class="card"><div class="label">รวมเวร (จัดแล้ว / เป้า)</div><strong>'+assigned+'</strong> <small>/ <span id="quotaTotal">'+targetTotal+'</span> เวร</small><div class="total-hint">รวมเป้ารายคนจากคอลัมน์ขวาสุด</div></div><div class="card accent"><div class="label">เวรรวม คนลำดับ 2–4</div><strong>'+report.groupCounts.join(' · ')+'</strong> <small>ครั้ง</small></div><div class="card"><div class="label">รายการที่ต้องตรวจ</div><strong>'+report.issues.length+'</strong> <small>รายการ</small></div>';
  $('status').innerHTML='<div class="status-banner '+(report.complete?'ok':'')+'"><span>'+(report.complete?'✓ ตารางครบทุกเวร และผ่านเงื่อนไขที่กำหนด':('ⓘ ตารางฉบับร่าง · '+coverage+' รายการจำนวนเวรไม่ครบ/เกิน · เป้าหมายไม่ตรง '+report.issues.filter(i=>i.type==='quota').length+' คน · คู่เวรชน '+report.issues.filter(i=>i.type==='exclusion').length+' วัน'+(report.issues.some(i=>i.type==='blocked')?' · พบเวรชน OFF / VAC':'')))+'</span><button class="textbtn" onclick="issuesModal()">ตรวจเงื่อนไข →</button></div>';
  let invalid=new Set(report.issues.filter(i=>i.p&&i.d).map(i=>key(i.p,i.d))),head='<thead><tr><th class="person">บุคลากร <span style="font-size:16px;color:#8da097">/ วันที่</span></th>';
  for(let d=1;d<=n;d++){let h=m.days[d].holiday||[0,6].includes(weekday(month,d));head+='<th class="'+(h?'holiday':'')+'"><button class="day-head" onclick="dayModal('+d+')" title="'+esc(m.days[d].note||'กำหนดจำนวนเวร')+'"><b>'+d+'</b><small>'+['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'][weekday(month,d)]+'</small></button></th>'}
@@ -41,7 +43,7 @@ function render(){
  head+='<td class="sum">'+totalEditor(p,tt[i].total)+'</td></tr>'});
  head+='</tbody><tfoot><tr class="coverage"><th class="person">จำนวนคน / ต้องการ</th>';
  for(let d=1;d<=n;d++){let need=CODES.reduce((s,c)=>s+m.days[d].need[c],0),got=state.people.filter(p=>cell(m,p.id,d).code).length,good=!report.issues.some(i=>i.type==='coverage'&&i.d===d);head+='<td class="'+(good?'':'gap')+'" title="คลิกหัววันที่เพื่อปรับจำนวน">'+got+'/'+need+'</td>'}
- head+='<td></td></tr></tbody>';$('scheduleTable').innerHTML=head;
+ head+='<td></td></tr></tfoot>';$('scheduleTable').innerHTML=head;
  let max=Math.max(...tt.map(t=>t.total),1);
  let quotas=quotaTargets(state,month), payRates=state.payRates||DEFAULT_PAY_RATES;
  let grandTotalPay=0, sumTotal=0, sumHours=0, sumNeed=CODES.map(c=>tt.reduce((a,x)=>a+x[c],0)), sumOff=tt.reduce((a,x)=>a+x.OFF,0), sumVac=tt.reduce((a,x)=>a+x.VAC,0);
@@ -79,8 +81,8 @@ function render(){
  $('fairnessDetail').innerHTML='<div style="line-height:1.8"><div><b>1. ความเท่ากันของคนลำดับ 2–4:</b> '+state.people.slice(1,4).map((p,i)=>esc(p.name)+' '+report.groupCounts[i]+' เวร').join(' · ')+(new Set(report.groupCounts).size===1?' <span style="color:#16a34a">✓ เท่ากันแล้ว</span>':' <span style="color:#dc2626">⚠ ยังไม่เท่ากัน</span>')+'</div><div><b>2. เวรรุ่งอรุณ (ร · ตัวหลักห้องบัตร):</b> ตัวหลัก (ลำดับ 1–4) รวม '+rMainCount+' เวร (เฉลี่ย '+rMainAvg+' เวร/คน) · คนอื่น รวม '+rOtherCount+' เวร (เฉลี่ย '+rOtherAvg+' เวร/คน) '+'<span class="help"> · แจกเศษหลังแบ่งเท่า ๆ กัน ปรับได้เมื่อชนเงื่อนไข</span>'+'</div><div><b>3. เงื่อนไขคู่เวร:</b> '+pairStatusText+'</div><div><b>4. ประมาณการค่าตอบแทนเดือนนี้:</b> รวมทั้งสิ้น <b style="color:#15803d;font-size:16px">'+grandTotalPay.toLocaleString('th-TH')+' บาท</b> <button class="textbtn" onclick="staffModal()" style="margin-left:8px">แก้ไขเรทที่บุคลากร →</button></div></div>';
  view(currentView);if(typeof renderEditor==='function')renderEditor()
 }
-function modal(title,body,foot){$('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modalFoot').innerHTML=foot||'<button onclick="closeModal()">ปิด</button>';if(!$('modal').open)$('modal').showModal()}
-function closeModal(){$('modal').close();editing=null}
+function modal(title,body,foot){if(typeof stopHelpReply==='function')stopHelpReply();$('modal').classList.remove('help-chat-modal');$('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modalFoot').innerHTML=foot||'<button onclick="closeModal()">ปิด</button>';if(!$('modal').open)$('modal').showModal()}
+function closeModal(){if(typeof stopHelpReply==='function')stopHelpReply();$('modal').close();editing=null}
 $('modal').addEventListener('click',e=>{if(e.target===$('modal')){let r=$('modal').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeModal()}});
 function cellModal(i,d){
  editing={i,d};let p=state.people[i],c=cell(activeMonth(),p.id,d);choice=c.block||c.code||'';
@@ -114,7 +116,7 @@ function issuesModal(){
 function solveCapacity(){let m=activeMonth();for(let d=1;d<=daysIn(state.selected);d++){let need=CODES.reduce((s,c)=>s+m.days[d].need[c],0),available=state.people.filter(p=>p.active&&!cell(m,p.id,d).block).length;if(need>available)return'วันที่ '+d+' ต้องการ '+need+' คน แต่มีคนไม่ติด OFF / VAC '+available+' คน'}return''}
 function focusIssue(i){let x=audit(state,state.selected).issues[i];if(x.p&&x.d){cellModal(state.people.findIndex(p=>p.id===x.p),x.d)}else if(x.d){dayModal(x.d)}else{view('summary');closeModal()}}
 function staffModal(){
- modal('บุคลากรและสิทธิ์รับเวร','<p class="help" style="margin-top:0">คนลำดับ 2–4 ยึดตามลำดับในหน้านี้ · เรทเงินใช้เท่ากันทุกประเภทเวร ไม่รวม OFF / VAC</p><div id="staffForm">'+state.people.map((p,i)=>'<div class="staff-item" data-id="'+esc(p.id)+'"><div class="row" style="justify-content:space-between"><b>'+(i+1)+'. '+(i>=1&&i<=3?'กลุ่มจำนวนเวรเท่ากัน':'บุคลากร')+'</b><label class="inline-field"><input type="checkbox" class="p-active" '+(p.active?'checked':'')+'> เปิดจัดเวร</label></div><div class="staff-grid"><label class="field">ชื่อ–สกุล<input class="p-name" maxlength="100" value="'+esc(p.name)+'"></label><label class="field">ตำแหน่ง<input class="p-role" maxlength="100" value="'+esc(p.role)+'"></label></div><div class="check-grid">'+CODES.map(c=>'<label><input type="checkbox" class="p-allowed" value="'+c+'" '+(p.allowed.includes(c)?'checked':'')+'><span class="chip '+c+'">'+META[c].label+'</span> '+(c==='X'?'รพ.สต.':c==='R'?'ห้องบัตร':'')+'</label>').join('')+'</div><div class="staff-grid"><label class="field">เรทเงิน (บาท / เวร)<input type="number" class="p-rate" min="0" max="10000" step="0.01" value="'+payRate(state,p.id)+'"></label></div></div>').join('')+'</div><p class="help">ตั้งจำนวนเวรที่ต้องการได้ที่ช่อง “รวม” ในตาราง จากนั้นกดจัดเวรอัตโนมัติ</p>','<button onclick="closeModal()">ยกเลิก</button><button class="primary" onclick="saveStaff()">บันทึกบุคลากร</button>')
+ modal('บุคลากรและเรทเงิน','<p class="help" style="margin-top:0">คนลำดับ 2–4 ยึดตามลำดับในหน้านี้ · เรทเงินใช้เท่ากันทุกประเภทเวร ไม่รวม OFF / VAC</p><div id="staffForm">'+state.people.map((p,i)=>'<div class="staff-item" data-id="'+esc(p.id)+'"><b>'+(i+1)+'. '+(i>=1&&i<=3?'กลุ่มจำนวนเวรเท่ากัน':'บุคลากร')+'</b><div class="staff-grid"><label class="field">ชื่อ–สกุล<input class="p-name" maxlength="100" value="'+esc(p.name)+'"></label><label class="field">ตำแหน่ง<input class="p-role" maxlength="100" value="'+esc(p.role)+'"></label></div><div class="staff-grid"><label class="field">เรทเงิน (บาท / เวร)<input type="number" class="p-rate" min="0" max="10000" step="0.01" value="'+payRate(state,p.id)+'"></label></div></div>').join('')+'</div><p class="help">ตั้งจำนวนเวรที่ต้องการได้ที่ช่อง “รวม” ในตาราง จากนั้นกดจัดเวรอัตโนมัติ</p>','<button onclick="closeModal()">ยกเลิก</button><button class="primary" onclick="saveStaff()">บันทึกบุคลากร</button>')
 }
 function saveStaff(){
  const result=[],rates={};
@@ -122,7 +124,7 @@ function saveStaff(){
   const p=state.people.find(p=>p.id===el.dataset.id),name=el.querySelector('.p-name').value.trim(),input=el.querySelector('.p-rate'),value=input.value.trim(),rate=Number(value);
   if(!name){toast('กรอกชื่อให้ครบทุกคน');return}
   if(value===''||!Number.isFinite(rate)||rate<0||rate>10000){toast('เรทเงินต้องเป็นตัวเลข 0–10,000 บาท');input.focus();return}
-  rates[p.id]=rate;result.push({...p,name,role:el.querySelector('.p-role').value.trim(),active:el.querySelector('.p-active').checked,allowed:[...el.querySelectorAll('.p-allowed:checked')].map(x=>x.value),prev:'',next:''});
+  rates[p.id]=rate;result.push({...p,name,role:el.querySelector('.p-role').value.trim(),prev:'',next:''});
  }
  checkpoint();state.people=result;state.payRates=rates;for(const m of Object.values(state.months))delete m.boundaries;changed();closeModal();toast('บันทึกบุคลากรและเรทเงินแล้ว');
 }
@@ -157,5 +159,5 @@ function validateBackup(s){
 }
 async function importBackup(input){let file=input.files[0];input.value='';if(!file)return;if(file.size>5000000){toast('ไฟล์ใหญ่เกิน 5 MB');return}try{let s=JSON.parse(await file.text());validateBackup(s);editing={importState:s};modal('นำเข้าข้อมูลสำรอง','<p>พบข้อมูล '+s.people.length+' คน · '+Object.keys(s.months).length+' เดือน</p><p class="help">ข้อมูลในเบราว์เซอร์จะถูกแทนที่ด้วยไฟล์นี้ ย้อนกลับได้ด้วยปุ่ม ↶ ย้อนกลับ</p>','<button onclick="closeModal()">ยกเลิก</button><button class="primary" onclick="confirmImport()">นำเข้าข้อมูลนี้</button>')}catch(e){toast('นำเข้าไม่ได้: '+e.message)}}
 function confirmImport(){let s=editing.importState;checkpoint();state=s;clearManualBoundaries(state);state.pairExclusions=clone(DEFAULT_PAIR_EXCLUSIONS);changed();closeModal();toast('นำเข้าข้อมูลสำรองแล้ว')}
-function helpModal(){modal('เริ่มจัดเวรใน 3 ขั้นตอน','<p><b>1. เตรียมตาราง</b><br>เลือกเดือน กดหัววันที่เพื่อตั้งวันหยุดและจำนวนคน สีส้มคือวันหยุด เสาร์–อาทิตย์กำหนดให้อัตโนมัติ ส่วนวันหยุดราชการต้องตรวจและเพิ่มเอง</p><p><b>2. กำหนดข้อยกเว้น</b><br>คลิกช่องของแต่ละคน เลือก OFF สีชมพู หรือ VAC วันลา หากเลือกเวรเอง ระบบจะล็อกไว้ (◆) และคงตารางทั้งเดือนของคนนี้ รวมช่องว่าง หากต้องการให้ระบบจัดคนนี้อีกครั้ง ให้ปลดล็อกเวรทุกช่องของคนนี้ในเดือนนี้</p><p><b>3. ให้ระบบช่วยจัด</b><br>กดจัดเวรอัตโนมัติ ระบบจะจัดใหม่เฉพาะคนที่ไม่มีเวรล็อก โดยหักเวรของคนที่จัดเองจากจำนวนที่ต้องการ และเก็บ OFF / VAC เสมอ และตรวจจำนวนคน ความเท่ากันของคน 2–4 กับบ่ายต่อดึก ถ้าจัดไม่ได้จะคงข้อมูลเดิม</p><p class="help">เวรคน 2–4 นับรวมเวรทุกชนิดครั้งละ 1 เวร ไม่รวม OFF / VAC · เวร ร สีฟ้าเริ่มต้นทุก จ.–ศ. วันละ 1 คน แม้ตรงวันหยุดราชการ · ร สีแดงเพิ่มจำนวนเองตามวันที่ออก รพ.สต. · หนึ่งคนรับวันละหนึ่งประเภทเวร</p><p class="help">ตารางเริ่มต้นคัดมาจากด้านขวาของชีต ต.ค.69 โดยเก็บข้อขัดแย้งเดิมไว้ให้ตรวจ ไม่ถือว่าผ่านเงื่อนไขจนกว่าระบบจะแสดงว่า ผ่านทุกเงื่อนไข · เลือกเดือนใหม่เพื่อเริ่มตารางว่าง</p><p class="help">การเลือกเองทำตารางเป็นฉบับร่างได้ ระบบกันบ่ายต่อดึกทันที ส่วนจำนวนคนและเวรเท่ากันจะเตือนจนกว่าจะแก้ครบ · สำรอง JSON ก่อนล้างข้อมูลเบราว์เซอร์หรือย้ายอุปกรณ์</p>')}
 render();
+if(removedLegacySample){save();toast('ลบตัวอย่างเดือนตุลาคมแล้ว · ย้อนกลับได้ด้วยปุ่ม ↶ ย้อนกลับ')}

@@ -40,6 +40,14 @@ body,button,input,select,textarea{font-family:'Google Sans','Noto Sans Thai','Le
  .cell-btn{min-height:57px;scroll-margin:62px 8px 8px 228px;user-select:none;-webkit-user-select:none}.cell-btn:hover{background:#f0e5ff!important}.cell-btn:focus-visible{outline:3px solid #8755d1;outline-offset:-3px;z-index:1;background:#f4ecff!important}.empty{color:#d4c9de}
  .paint-enabled .cell-btn{cursor:crosshair;touch-action:none}.cell-btn.paint-preview{background:#e8d8ff!important;box-shadow:inset 0 0 0 2px #9366d0!important}.cell-btn[data-preview] .chip,.cell-btn[data-preview] .lock,.cell-btn[data-preview] small{visibility:hidden}.cell-btn[data-preview]:after{content:attr(data-preview);position:absolute;inset:10px 5px;display:grid;place-items:center;background:#8052cb;color:#fff;border-radius:9px;font-size:16px;font-weight:700}
  .sum{background:#f0e8ff;color:#7041b7}.coverage td{background:#f7f3fc;color:#6c5a7e}.coverage .gap{background:#fff1dd;color:#9a602e}.under-table{background:#fff;font-size:16px;padding:12px 20px}
+ /* Keep daily coverage and per-person targets visible inside the scrolling table. */
+ .schedule .sum,.schedule .total-head,.schedule tfoot .coverage>:last-child{position:sticky;right:0;box-shadow:-4px 0 8px #30264e0c}
+ .schedule tbody .sum{z-index:2}
+ .schedule .total-head{z-index:5}
+ .schedule tfoot .coverage>*{position:sticky;bottom:0;z-index:3;box-shadow:0 -3px 8px #30264e0c}
+ .schedule tfoot .coverage>.person{z-index:5;background:#f2ebfa}
+ .schedule tfoot .coverage>:last-child{z-index:6;background:#f0e8ff;box-shadow:-4px -3px 8px #30264e0c}
+ .cell-btn{scroll-margin:62px 120px 54px 328px}
  .bottom .panel:first-child{background:#f1ebff}.bottom .panel:last-child{background:#eaf8f2}.info h3{color:#59416f}.info p{color:#74647f}.toast{background:#5d368f;border:1px solid #b899e2;box-shadow:0 8px 30px #50247735}
  .shortcut-list p{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line);margin:0}.shortcut-list kbd{font-size:16px;background:#f1e7ff}
  @media(max-width:1250px){.shell{grid-template-columns:154px minmax(0,1fr)}main{padding:20px 18px}.paint-tool{padding:7px;gap:5px}.paint-palette{align-items:flex-start}.paint-intro{display:none}.brand{font-size:18px}}
@@ -47,3 +55,36 @@ body,button,input,select,textarea{font-family:'Google Sans','Noto Sans Thai','Le
  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 }
 @media print{.paint-bar{display:none!important}.cell-btn.paint-preview{box-shadow:none!important}.cell-btn[data-preview]:after{display:none!important}.cell-btn[data-preview] .chip{visibility:visible!important}}
+@media screen{
+ .help-chat-modal[open]{display:flex;flex-direction:column;width:min(640px,calc(100% - 24px));height:min(760px,calc(100dvh - 32px));max-height:calc(100dvh - 32px)}
+ .help-chat-modal .modal-head,.help-chat-modal .modal-foot{flex-shrink:0}
+ .help-chat-modal .modal-head{padding:18px 22px;background:#fff}
+ .help-chat-modal .modal-body{display:flex;flex-direction:column;flex:1;min-height:0;max-height:none;padding:0;overflow:hidden}
+ .help-chat-modal .modal-foot{justify-content:space-between;padding:14px 20px;background:#fff}
+ .help-chat-intro{display:flex;align-items:center;gap:11px;padding:14px 22px;background:#faf7ff;border-bottom:1px solid #ece3f5;flex-shrink:0}
+ .help-chat-avatar{display:block;width:44px;height:44px;object-fit:contain;flex-shrink:0}
+ .help-chat-intro b{display:block;color:#59416f;font-size:16px}
+ .help-chat-intro small{display:block;color:#82728e;font-size:13px}
+ .help-chat-badge{margin-left:auto;color:#4a7968;background:#e6f5ec;border-radius:20px;padding:3px 9px;font-size:12px;white-space:nowrap}
+ .help-messages{flex:1;min-height:100px;overflow-y:auto;overscroll-behavior:contain;padding:20px 22px;background:linear-gradient(160deg,#faf7ff,#fffaf4);scrollbar-color:#cfbce5 transparent;scrollbar-width:thin}
+ .help-message{display:flex;flex-direction:column;align-items:flex-start;margin-bottom:17px}
+ .help-message:last-child{margin-bottom:0;animation:help-message-in .22s ease-out}
+ .help-sender{font-size:12px;color:#8a789c;margin:0 4px 5px}
+ .help-bubble{max-width:91%;padding:12px 16px;background:#fff;border:1px solid #e9e0f2;border-radius:4px 18px 18px;line-height:1.8;font-size:15px;overflow-wrap:anywhere;color:#4b3b5e;box-shadow:0 3px 9px #68468a05}
+ .help-message.from-user{align-items:flex-end}
+ .from-user .help-bubble{background:#7953d3;color:#fff;border-color:#7953d3;border-radius:18px 4px 18px 18px}
+ .help-typing{display:flex;align-items:center;gap:5px;min-height:47px;padding:11px 15px}
+ .help-typing>span{width:6px;height:6px;background:#a78ac9;border-radius:50%;animation:help-typing-dot 1.05s ease-in-out infinite}
+ .help-typing>span:nth-child(2){animation-delay:.15s}.help-typing>span:nth-child(3){animation-delay:.3s}
+ .help-typing small{font-size:12px;color:#8a789c;margin-left:5px}
+ .help-questions{padding:12px 20px 15px;border-top:1px solid #ece3f5;background:#fff;flex-shrink:0}
+ .help-questions p{margin:0 0 9px;color:#82728e;font-size:13px}
+ .help-question-list{display:grid;grid-template-columns:1fr 1fr;gap:7px;max-height:154px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#cfbce5 transparent;padding:3px}
+ .help-question{display:flex;justify-content:space-between;align-items:center;gap:9px;text-align:left;font-size:13px;padding:9px 11px;border-radius:12px;background:#fbf8ff;border:1px solid #e5d9f3;color:#72529a;line-height:1.5}
+ .help-question>span{color:#a78ac9;flex-shrink:0}
+ .help-question:hover{background:#efe5ff;border-color:#c5a8e4}.help-question:disabled{opacity:.5}
+ @keyframes help-message-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+ @keyframes help-typing-dot{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-4px);opacity:1}}
+ @media(max-width:540px){.help-chat-modal .modal-head{padding:14px 16px}.help-chat-modal .modal-head h2{font-size:17px}.help-chat-intro{padding:11px 16px}.help-chat-badge{display:none}.help-messages{padding:16px}.help-bubble{max-width:95%;font-size:14px;padding:10px 13px}.help-questions{padding:10px 12px}.help-question-list{grid-template-columns:1fr;max-height:135px}.help-chat-modal .modal-foot{padding:11px 14px}}
+ @media(prefers-reduced-motion:reduce){.help-message:last-child,.help-typing>span{animation:none}}
+}

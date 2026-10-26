@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),c=require('../js/core.js');
 const seed=JSON.parse(require('node:vm').runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../js/data.js'),'utf8')+'; JSON.stringify(SEED)'));
-let result=c.solve(seed,seed.selected);assert.equal(result.ok,false);assert.equal(result.reason,'capacity');console.log('Original OFF constraints: correctly rejects day 24');
+assert.deepEqual(seed.months[seed.selected],c.freshMonth(seed.selected));
+let result=c.solve(require('./fixtures/legacy-october.json'),seed.selected);assert.equal(result.ok,false);assert.equal(result.reason,'capacity');console.log('Blank startup and original OFF constraints: correctly rejects day 24');
 for(let month of ['2026-10','2026-11','2027-02','2028-02']){
 let s=c.clone(seed);s.selected=month;s.months[month]=c.freshMonth(month);
 s.months[month].cells['2|3']={code:'',block:'VAC',locked:false};s.months[month].cells['3|6']={code:'',block:'OFF',locked:false};
