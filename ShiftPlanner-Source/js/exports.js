@@ -3,8 +3,8 @@ const THAI_MONTHS=['มกราคม','กุมภาพันธ์','มี
 const THAI_DAYS=['อา','จ','อ','พ','พฤ','ศ','ส'];
 function excelColumn(n){let s='';while(n){const r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s}
 function exportModel(s,month,csv=false){
- const m=s.months[month],n=daysIn(month),[year,mon]=month.split('-').map(Number),label=THAI_MONTHS[mon-1]+' '+(year+543),data=clone(EXPORT_TEMPLATE.cells),ts=totals(s,month);
- if(s.people.length>9)throw Error('แบบ Excel ต้นฉบับรองรับ 9 คน กรุณาใช้ CSV สำหรับรายชื่อมากกว่า 9 คน');
+ const m=s.months[month],n=daysIn(month),[year,mon]=month.split('-').map(Number),label=THAI_MONTHS[mon-1]+' '+(year+543),data=clone(EXPORT_TEMPLATE.cells),people=monthPeople(s,month),allTotals=totals(s,month),ts=people.map(p=>allTotals.find(t=>t.id===p.id));
+ if(people.length>9)throw Error('แบบ Excel ต้นฉบับรองรับ 9 คน กรุณาใช้ CSV สำหรับรายชื่อมากกว่า 9 คน');
  const put=(ref,v,style,formula)=>{data[ref]={s:style??data[ref]?.s??0,v,...(formula?{f:formula}:{})}};
  put('A2','ที่ '+(m.exportMeta?.orderNumber||'        ')+' / '+(year+543));
  put('A3',' เรื่อง ให้เจ้าหน้าที่ปฏิบัติงานนอกเวลาราชการและวันหยุดราชการ งานห้องบัตรและเวชระเบียน ประจำเดือน '+THAI_MONTHS[mon-1]+' พ.ศ. '+(year+543));
@@ -16,7 +16,7 @@ function exportModel(s,month,csv=false){
   put(col+'8',d<=n?d:'',holiday?8:7);put(col+'9',d<=n?THAI_DAYS[weekday(month,d)]:'',holiday?8:7);
  }
  for(let i=0;i<9;i++){
-  const p=s.people[i],row=i+10,t=ts[i];
+  const p=people[i],row=i+10,t=ts[i];
   put('A'+row,p?i+1:'');put('B'+row,p?.name||'');put('C'+row,p?.role||'');
   for(let d=1;d<=31;d++){
    const c=p&&d<=n?cell(m,p.id,d):{code:'',block:''},holiday=d<=n&&(m.days[d].holiday||[0,6].includes(weekday(month,d)));
@@ -30,22 +30,29 @@ function exportModel(s,month,csv=false){
    put('AI'+row,t.N+t.M+t.A,38,'COUNTIF(D'+row+':AH'+row+',"ด")+COUNTIF(D'+row+':AH'+row+',"ช")+COUNTIF(D'+row+':AH'+row+',"บ")');
    put('AJ'+row,t.R+t.X,101,'COUNTIF(D'+row+':AH'+row+',"ร")');
    put('AK'+row,t.total,101,'AI'+row+'+AJ'+row);
-   put('AL'+row,t.total*payRate(s,p.id),EXPORT_TEMPLATE.styleIds.money,'AK'+row+'*'+payRate(s,p.id));
+   const cardRate=payRate(s,p.id,'card'),dawnRate=payRate(s,p.id,'dawn'),outreachRate=payRate(s,p.id,'outreach');
+   put('AM'+row,cardRate,0);put('AN'+row,dawnRate,0);put('AO'+row,outreachRate,0);
+   // Hidden raw codes keep the two identically displayed R shifts separate.
+   for(let d=1;d<=31;d++)put(excelColumn(d+43)+row,d<=n?cell(m,p.id,d).code:'',0);
+   put('AP'+row,t.R,0,'COUNTIF(AR'+row+':BV'+row+',"R")');
+   put('AQ'+row,t.X,0,'COUNTIF(AR'+row+':BV'+row+',"X")');
+   const formula=cardRate===dawnRate&&cardRate===outreachRate?'AK'+row+'*'+cardRate:'ROUND(AI'+row+'*AM'+row+'+AP'+row+'*AN'+row+'+AQ'+row+'*AO'+row+',2)';
+   put('AL'+row,totalPay(s,t),EXPORT_TEMPLATE.styleIds.money,formula);
   }else for(const col of ['AI','AJ','AK','AL'])put(col+row,'');
  }
  put('AI19',ts.reduce((sum,t)=>sum+t.N+t.M+t.A,0),147,'SUM(AI10:AI18)');
  put('AJ19',ts.reduce((sum,t)=>sum+t.R+t.X,0),147,'SUM(AJ10:AJ18)');
  put('AK19',ts.reduce((sum,t)=>sum+t.total,0),147,'SUM(AK10:AK18)');
- put('AL19',ts.reduce((sum,t)=>sum+t.total*payRate(s,t.id),0),EXPORT_TEMPLATE.styleIds.money,'SUM(AL10:AL18)');
- return{cells:data,month,n};
+ put('AL19',ts.reduce((sum,t)=>sum+Math.round(totalPay(s,t)*100),0)/100,EXPORT_TEMPLATE.styleIds.money,'SUM(AL10:AL18)');
+ return{cells:data,month,n,people};
 }
 function csvText(s,month){
  // Keep the original 31 day columns, heading rows, notes and signature positions.
- const copy=s.people.length>9?{...s,people:s.people.slice(0,9)}:s,model=exportModel(copy,month,true);
+ const people=monthPeople(s,month),copy=people.length>9?{...s,people:people.slice(0,9)}:s,model=exportModel(copy,month,true);
  const rows=Array.from({length:29},(_,r)=>Array.from({length:38},(_,c)=>model.cells[excelColumn(c+1)+(r+1)]?.v??''));
- if(s.people.length>9){
-  const ts=totals(s,month);rows.splice(18,0,...s.people.slice(9).map((p,j)=>{const t=ts[j+9];return[j+10,p.name,p.role,...Array.from({length:31},(_,i)=>{const c=i<daysIn(month)?cell(s.months[month],p.id,i+1):{};return c.code?(c.code==='X'?'ร(รพ.สต.)':META[c.code].label):(c.block||'')}),t.N+t.M+t.A,t.R+t.X,t.total,t.total*payRate(s,p.id)]}));
-  const summary=rows[18+s.people.length-9];summary[34]=ts.reduce((a,t)=>a+t.N+t.M+t.A,0);summary[35]=ts.reduce((a,t)=>a+t.R+t.X,0);summary[36]=ts.reduce((a,t)=>a+t.total,0);summary[37]=ts.reduce((a,t)=>a+t.total*payRate(s,t.id),0);
+ if(people.length>9){
+  const all=totals(s,month),ts=people.map(p=>all.find(t=>t.id===p.id));rows.splice(18,0,...people.slice(9).map((p,j)=>{const t=ts[j+9];return[j+10,p.name,p.role,...Array.from({length:31},(_,i)=>{const c=i<daysIn(month)?cell(s.months[month],p.id,i+1):{};return c.code?(c.code==='X'?'ร(รพ.สต.)':META[c.code].label):(c.block||'')}),t.N+t.M+t.A,t.R+t.X,t.total,totalPay(s,t)]}));
+  const summary=rows[18+people.length-9];summary[34]=ts.reduce((a,t)=>a+t.N+t.M+t.A,0);summary[35]=ts.reduce((a,t)=>a+t.R+t.X,0);summary[36]=ts.reduce((a,t)=>a+t.total,0);summary[37]=ts.reduce((a,t)=>a+Math.round(totalPay(s,t)*100),0)/100;
  }
  const safe=v=>{let text=String(v??'');if(/^[=+@\-\t\r]/.test(text))text="'"+text;return '"'+text.replace(/"/g,'""')+'"'};
  return '\ufeff'+rows.map(row=>row.map(safe).join(',')).join('\r\n');
@@ -54,10 +61,10 @@ function xmlEscape(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'
 function xmlAttrs(o){return Object.entries(o).map(([k,v])=>' '+k+'="'+xmlEscape(v)+'"').join('')}
 function xlsxParts(s,month){
  const model=exportModel(s,month),main='http://schemas.openxmlformats.org/spreadsheetml/2006/main',rels='http://schemas.openxmlformats.org/package/2006/relationships';
- let sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="'+main+'"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:AL29"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>'+EXPORT_TEMPLATE.cols.map(c=>'<col'+xmlAttrs(c)+'/>').join('')+'</cols><sheetData>';
+ let sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="'+main+'"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:BV29"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>'+EXPORT_TEMPLATE.cols.map(c=>'<col'+xmlAttrs(c)+'/>').join('')+'<col min="39" max="74" width="10" hidden="1" customWidth="1"/></cols><sheetData>';
  for(let r=1;r<=29;r++){
   const attrs=EXPORT_TEMPLATE.rows.find(row=>Number(row.r)===r)||{r};sheet+='<row'+xmlAttrs(attrs)+'>';
-  for(let c=1;c<=38;c++){
+  for(let c=1;c<=74;c++){
    const ref=excelColumn(c)+r,v=model.cells[ref];if(!v)continue;
    const a=' r="'+ref+'" s="'+v.s+'"';
    if(v.f)sheet+='<c'+a+'><f>'+xmlEscape(v.f)+'</f><v>'+v.v+'</v></c>';
@@ -68,7 +75,7 @@ function xlsxParts(s,month){
  }
  const merges=[...EXPORT_TEMPLATE.merges];
  // Contiguous vacation cells are merged as on the supplied handwritten layout.
- for(let i=0;i<s.people.length;i++){for(let d=1;d<=model.n;d++){let end=d;const p=s.people[i];if(cell(s.months[month],p.id,d).block!=='VAC'||cell(s.months[month],p.id,d).code)continue;while(end<model.n&&cell(s.months[month],p.id,end+1).block==='VAC'&&!cell(s.months[month],p.id,end+1).code)end++;if(end>d)merges.push(excelColumn(d+3)+(i+10)+':'+excelColumn(end+3)+(i+10));d=end}}
+ for(let i=0;i<model.people.length;i++){for(let d=1;d<=model.n;d++){let end=d;const p=model.people[i];if(cell(s.months[month],p.id,d).block!=='VAC'||cell(s.months[month],p.id,d).code)continue;while(end<model.n&&cell(s.months[month],p.id,end+1).block==='VAC'&&!cell(s.months[month],p.id,end+1).code)end++;if(end>d)merges.push(excelColumn(d+3)+(i+10)+':'+excelColumn(end+3)+(i+10));d=end}}
  sheet+='</sheetData><mergeCells count="'+merges.length+'">'+merges.map(ref=>'<mergeCell ref="'+ref+'"/>').join('')+'</mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.2" right="0.2" top="0.3" bottom="0.3" header="0.1" footer="0.1"/><pageSetup paperSize="8" orientation="landscape" fitToWidth="1" fitToHeight="1"/></worksheet>';
  const type='application/vnd.openxmlformats-officedocument.';
  return {

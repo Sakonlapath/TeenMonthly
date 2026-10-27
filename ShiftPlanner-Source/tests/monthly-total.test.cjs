@@ -1,5 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),c=require('../js/core');
 const s=JSON.parse(vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../js/data.js'),'utf8')+';JSON.stringify(SEED)'));
+// Keep the original eight-person screenshot scenario as a regression fixture.
+s.people=s.people.slice(0,8);
 const month='2026-11';s.selected=month;s.months[month]=c.freshMonth(month);
 const m=s.months[month];m.quotas=Object.fromEntries([9,15,15,15,5,5,6,8].map((v,i)=>[String(i+1),v]));
 const absences={'1':{OFF:[21,22],VAC:[23,24]},'3':{OFF:[14,15],VAC:[13]},'4':{OFF:[2,3,4,5,12]},'5':{OFF:[1]},'7':{OFF:[1,21,22,23,24],VAC:[25]},'8':{OFF:[23],VAC:[24,25]}};

@@ -1,11 +1,11 @@
 /* Shift planner constraint engine. Pure functions shared by UI and checks. */
 const CODES=['N','M','A','R','X'];
 const META={N:{label:'ด',name:'ดึก',time:'00:00–08:00',hours:8},M:{label:'ช',name:'เช้า',time:'08:00–16:00',hours:8},A:{label:'บ',name:'บ่าย',time:'16:00–00:00',hours:8},R:{label:'ร',name:'รุ่งอรุณ · ห้องบัตร',time:'06:30–08:30',hours:2},X:{label:'ร',name:'ออกรพ.สต.',time:'06:30–08:30',hours:2}};
-const DEFAULT_PAY_RATES={'1':520,'2':330,'3':330,'4':330,'5':650,'6':650,'7':650,'8':390};
+const DEFAULT_PAY_RATES={'1':520,'2':330,'3':330,'4':330,'5':650,'6':650,'7':650,'8':390,'9':0};
 const DEFAULT_PAIR_EXCLUSIONS=[['1','8']];
 const MAIN_STAFF_IDS=['1','2','3','4'];
 const WEEKDAY_NIGHT_IDS=['2','3','4','5'];
-const SHIFT_GROUPS=[{id:'card',label:'รวมห้องบัตร',codes:['N','M','A']},{id:'dawn',label:'รวมเวรรุ่งอรุณห้องบัตร',codes:['R']},{id:'outreach',label:'รวมเวร รพ.สต.',codes:['X']}];
+const SHIFT_GROUPS=[{id:'card',label:'ห้องบัตร',codes:['N','M','A']},{id:'dawn',label:'รุ่งอรุณ',codes:['R']},{id:'outreach',label:'รพ.สต.',codes:['X']}];
 const SHIFT_GROUP_BY_CODE=Object.fromEntries(SHIFT_GROUPS.flatMap(g=>g.codes.map(code=>[code,g.id])));
 const clone=x=>JSON.parse(JSON.stringify(x));
 const key=(p,d)=>p+'|'+d;
@@ -16,7 +16,8 @@ function monthOffset(month,off){let[y,m]=month.split('-').map(Number),dt=new Dat
 function freshMonth(month){let days={};for(let d=1;d<=daysIn(month);d++){let wk=weekday(month,d)>0&&weekday(month,d)<6;days[d]={holiday:false,note:'',need:{N:1,M:wk?0:2,A:1,R:wk?1:0,X:0}}}return{cells:{},days}}
 function cell(m,p,d){return m.cells[key(p,d)]||{code:'',block:'',locked:false}}
 function manualPeople(m){return new Set(Object.entries(m.cells).filter(([,c])=>c.code&&c.locked).map(([k])=>k.split('|')[0]))}
-function group(state){return state.people.slice(1,4).map(p=>p.id)}
+function monthPeople(state,month){const excluded=new Set(state.months[month].excludedStaffIds||[]);return state.people.filter(p=>!excluded.has(p.id))}
+function group(state,month){const included=month?new Set(monthPeople(state,month).map(p=>p.id)):null;return state.people.slice(1,4).filter(p=>!included||included.has(p.id)).map(p=>p.id)}
 function eligibleOnDay(p,month,d,code){return p.active&&p.allowed.includes(code)&&(code!=='N'||[0,6].includes(weekday(month,d))||WEEKDAY_NIGHT_IDS.includes(p.id))}
 function restConflict(previous,next){return previous==='A'&&['N','R','X'].includes(next)}
 function restDescription(next){return next==='N'?'บ่ายต่อดึก':next==='R'?'บ่ายต่อรุ่งอรุณห้องบัตร':'บ่ายต่อเวร รพ.สต.'}
@@ -33,7 +34,7 @@ function categoryTargets(state,month,raw=state.months[month].categoryQuotas||{})
    targets[category]=Number(v);
   }
   if(Object.values(targets).reduce((a,b)=>a+b,0)>n)throw Error('เป้าหมายทั้ง 3 ประเภทรวมกันต้องไม่เกิน '+n+' เวรต่อคน');
-  if(Object.keys(targets).length)result[id]=targets;
+  if(Object.keys(targets).length&&!(state.months[month].excludedStaffIds||[]).includes(id))result[id]=targets;
  }
  return result;
 }
@@ -41,53 +42,55 @@ function quotaTargets(state,month,raw=state.months[month].quotas||state.quotas||
  const targets={},ids=new Set(state.people.map(p=>p.id)),n=daysIn(month),categories=categoryTargets(state,month);
  for(const[id,v]of Object.entries(raw)){if(v===''||v===null||v===undefined)continue;if(!ids.has(id)||!Number.isInteger(Number(v))||Number(v)<0||Number(v)>n)throw Error('เป้าหมายเวรต้องเป็นจำนวนเต็ม 0–'+n);targets[id]=Number(v)}
  for(const[id,values]of Object.entries(categories))if(SHIFT_GROUPS.every(g=>values[g.id]!==undefined))targets[id]=Object.values(values).reduce((a,b)=>a+b,0);
- const g=group(state),values=g.filter(id=>targets[id]!==undefined).map(id=>targets[id]);
+ for(const id of state.months[month].excludedStaffIds||[])delete targets[id];
+ const g=group(state,month),values=g.filter(id=>targets[id]!==undefined).map(id=>targets[id]);
  if(new Set(values).size>1){if(g.some(id=>SHIFT_GROUPS.every(kind=>categories[id]?.[kind.id]!==undefined)))return targets;throw Error('เป้าหมายคนลำดับ 2–4 ต้องเท่ากัน')}
  if(values.length)g.forEach(id=>targets[id]=values[0]);return targets;
 }
-function payRate(state,id){return state.payRates?.[id]??DEFAULT_PAY_RATES[id]??0}
+function payRate(state,id,category='card'){const rate=state.payRates?.[id]??DEFAULT_PAY_RATES[id]??0;return typeof rate==='number'?rate:(rate[category]??DEFAULT_PAY_RATES[id]??0)}
+function totalPay(state,t){const counts=categoryTotals(t);return SHIFT_GROUPS.reduce((sum,g)=>sum+counts[g.id]*Math.round(payRate(state,t.id,g.id)*100),0)/100}
 function dawnTargets(state,month){
- const roster=state.people.filter(p=>p.active&&p.allowed.includes('R'));
+ const roster=monthPeople(state,month).filter(p=>p.active&&p.allowed.includes('R'));
  const main=new Set(state.people.slice(0,4).map(p=>p.id));
  const ordered=[...roster.filter(p=>main.has(p.id)),...roster.filter(p=>!main.has(p.id))];
  const total=Object.values(state.months[month].days).reduce((s,d)=>s+d.need.R,0),base=Math.floor(total/Math.max(1,roster.length)),remainder=total%Math.max(1,roster.length);
  return Object.fromEntries(ordered.map((p,i)=>[p.id,base+(i<remainder?1:0)]));
 }
-function boundary(state,month,p,side){let adjacent=state.months[monthOffset(month,side)],n=side<0?daysIn(monthOffset(month,-1)):1;let actual=adjacent?cell(adjacent,p.id,n).code:'';let configured=state.months[month].boundaries?.[p.id]?.[side<0?'prev':'next'];return adjacent?actual:(configured??p[side<0?'prev':'next']??'')}
-function totals(state,month){let m=state.months[month];return state.people.map(p=>{let t={id:p.id,total:0,hours:0,OFF:0,VAC:0,N:0,M:0,A:0,R:0,X:0};for(let d=1;d<=daysIn(month);d++){let c=cell(m,p.id,d);if(CODES.includes(c.code)){t[c.code]++;t.total++;t.hours+=META[c.code].hours}if(c.block)t[c.block]++}return t})}
-function audit(state,month,options={}){let m=state.months[month],n=daysIn(month),issues=[],ts=totals(state,month);const add=(type,text,p,d)=>issues.push({type,text,p,d});
-for(let d=1;d<=n;d++){for(let code of CODES){let got=state.people.filter(p=>cell(m,p.id,d).code===code).length,need=m.days[d].need[code];if(got!==need)add('coverage','วันที่ '+d+' · '+META[code].name+' '+got+'/'+need+' คน',null,d)}}
-for(let p of state.people){for(let d=1;d<=n;d++){let c=cell(m,p.id,d);if(c.code&&c.block)add('blocked',p.name+' วันที่ '+d+' · มีเวรชน '+c.block,p.id,d);if(c.code&&!eligibleOnDay(p,month,d,c.code))add('eligibility',p.name+' วันที่ '+d+' · ไม่รับเวรประเภทนี้'+(c.code==='N'?' (ดึก จ.–ศ. เฉพาะสุขสันต์ นุ่มนวล เกศสรา ปฏิภาณ)':''),p.id,d);let prev=d===1?boundary(state,month,p,-1):cell(m,p.id,d-1).code;if(restConflict(prev,c.code))add('rest',p.name+' วันที่ '+d+' · '+restDescription(c.code),p.id,d)}
+function boundary(state,month,p,side){let adjacent=state.months[monthOffset(month,side)],n=side<0?daysIn(monthOffset(month,-1)):1;let actual=adjacent&&!(adjacent.excludedStaffIds||[]).includes(p.id)?cell(adjacent,p.id,n).code:'';let configured=state.months[month].boundaries?.[p.id]?.[side<0?'prev':'next'];return adjacent?actual:(configured??p[side<0?'prev':'next']??'')}
+function totals(state,month){let m=state.months[month],included=new Set(monthPeople(state,month).map(p=>p.id));return state.people.map(p=>{let t={id:p.id,total:0,hours:0,OFF:0,VAC:0,N:0,M:0,A:0,R:0,X:0};if(included.has(p.id))for(let d=1;d<=daysIn(month);d++){let c=cell(m,p.id,d);if(CODES.includes(c.code)){t[c.code]++;t.total++;t.hours+=META[c.code].hours}if(c.block)t[c.block]++}return t})}
+function audit(state,month,options={}){let m=state.months[month],n=daysIn(month),people=monthPeople(state,month),included=new Set(people.map(p=>p.id)),issues=[],ts=totals(state,month);const add=(type,text,p,d)=>issues.push({type,text,p,d});
+for(let d=1;d<=n;d++){for(let code of CODES){let got=people.filter(p=>cell(m,p.id,d).code===code).length,need=m.days[d].need[code];if(got!==need)add('coverage','วันที่ '+d+' · '+META[code].name+' '+got+'/'+need+' คน',null,d)}}
+for(let p of people){for(let d=1;d<=n;d++){let c=cell(m,p.id,d);if(c.code&&c.block)add('blocked',p.name+' วันที่ '+d+' · มีเวรชน '+c.block,p.id,d);if(c.code&&!eligibleOnDay(p,month,d,c.code))add('eligibility',p.name+' วันที่ '+d+' · ไม่รับเวรประเภทนี้'+(c.code==='N'?' (ดึก จ.–ศ. เฉพาะสุขสันต์ นุ่มนวล เกศสรา ปฏิภาณ)':''),p.id,d);let prev=d===1?boundary(state,month,p,-1):cell(m,p.id,d-1).code;if(restConflict(prev,c.code))add('rest',p.name+' วันที่ '+d+' · '+restDescription(c.code),p.id,d)}
 const next=boundary(state,month,p,1);if(restConflict(cell(m,p.id,n).code,next))add('rest',p.name+' วันสุดท้าย · '+restDescription(next)+'เดือนถัดไป',p.id,n)}
 let excl=options.pairExclusions!==undefined?options.pairExclusions:(state.pairExclusions!==undefined?state.pairExclusions:DEFAULT_PAIR_EXCLUSIONS);
-if(excl&&excl.length){for(let d=1;d<=n;d++){for(let[x,y]of excl){let cX=cell(m,x,d),cY=cell(m,y,d);if(cX.code&&cY.code){let pX=state.people.find(p=>p.id===x),pY=state.people.find(p=>p.id===y);add('exclusion','วันที่ '+d+' · '+(pX?pX.name:x)+' กับ '+(pY?pY.name:y)+' มีเวรวันเดียวกัน (ห้ามขึ้นเวรวันเดียวกัน)',x,d)}}}}
+if(excl&&excl.length){for(let d=1;d<=n;d++){for(let[x,y]of excl){if(!included.has(x)||!included.has(y))continue;let cX=cell(m,x,d),cY=cell(m,y,d);if(cX.code&&cY.code){let pX=state.people.find(p=>p.id===x),pY=state.people.find(p=>p.id===y);add('exclusion','วันที่ '+d+' · '+(pX?pX.name:x)+' กับ '+(pY?pY.name:y)+' มีเวรวันเดียวกัน (ห้ามขึ้นเวรวันเดียวกัน)',x,d)}}}}
 let targets;try{targets=quotaTargets(state,month,options.quotas||m.quotas||state.quotas||{})}catch(e){add('quota',e.message);targets={}}
 if(targets){for(let p of state.people){let tgt=targets[p.id];if(tgt!==undefined&&tgt!==''&&Number.isInteger(Number(tgt))){let actual=ts.find(t=>t.id===p.id)?.total??0;if(actual!==Number(tgt)){add('quota',p.name+' มี '+actual+' เวร (เป้าหมาย '+tgt+' เวร)',p.id)}}}}
 try{for(const[id,values]of Object.entries(categoryTargets(state,month))){const actual=categoryTotals(ts.find(t=>t.id===id)),p=state.people.find(p=>p.id===id);for(const g of SHIFT_GROUPS)if(values[g.id]!==undefined&&actual[g.id]!==values[g.id])add('quota',p.name+' · '+g.label+' '+actual[g.id]+'/'+values[g.id]+' เวร',id)}}catch(e){add('quota',e.message)}
-let g=group(state),counts=g.map(id=>ts.find(t=>t.id===id).total);if(g.length===3&&new Set(counts).size!==1)add('fairness','คนลำดับ 2–4 มีเวร '+counts.join(' / ')+' ครั้ง ต้องเท่ากัน');
+let g=group(state,month),counts=g.map(id=>ts.find(t=>t.id===id).total);if(g.length>1&&new Set(counts).size!==1)add('fairness','คนลำดับ 2–4 ที่ลงตารางเดือนนี้มีเวร '+counts.join(' / ')+' ครั้ง ต้องเท่ากัน');
 if(targets&&new Set(g.filter(id=>targets[id]!==undefined).map(id=>targets[id])).size>1)add('quota','เป้ารวมทั้ง 3 ประเภทของคนลำดับ 2–4 ต้องเท่ากัน');
 return{issues,totals:ts,complete:!issues.length,groupCounts:counts}
 }
 function solve(state,month,opts={}){
- const original=state.months[month], n=daysIn(month), people=state.people, g=group(state), fixedPeople=manualPeople(original);
- if(g.length!==3)return{ok:false,message:'ต้องมีบุคลากรอย่างน้อย 4 คน เพื่อกำหนดกลุ่มลำดับ 2–4'};
+ const original=state.months[month], n=daysIn(month), people=monthPeople(state,month), included=new Set(people.map(p=>p.id)),g=group(state,month), fixedPeople=manualPeople(original);
  const excl=opts.pairExclusions!==undefined?opts.pairExclusions:(state.pairExclusions!==undefined?state.pairExclusions:DEFAULT_PAIR_EXCLUSIONS);
  const mainIds=opts.mainStaffIds||state.mainStaffIds||MAIN_STAFF_IDS;
  let targets,categoryGoals;try{targets=quotaTargets(state,month,opts.quotas||original.quotas||state.quotas||{});categoryGoals=categoryTargets(state,month)}catch(e){return{ok:false,reason:'quota',message:e.message}}
  if(new Set(g.filter(id=>targets[id]!==undefined).map(id=>targets[id])).size>1)return{ok:false,reason:'quota',message:'เป้ารวมทั้ง 3 ประเภทของคนลำดับ 2–4 ต้องเท่ากัน กรุณาปรับเป้ารายคนก่อนจัดอัตโนมัติ'};
  let gTarget=targets[g[0]];
  const base=clone(original), demand=[],lockedCounts={},counts={};people.forEach(p=>{counts[p.id]=0;lockedCounts[p.id]=0});
- for(let [k,c] of Object.entries(base.cells)){if(!fixedPeople.has(k.split('|')[0])&&!c.locked)c.code='';if(!c.code&&!c.block&&!c.locked)delete base.cells[k]}
+ for(let [k,c] of Object.entries(base.cells)){if(!included.has(k.split('|')[0]))continue;if(!fixedPeople.has(k.split('|')[0])&&!c.locked)c.code='';if(!c.code&&!c.block&&!c.locked)delete base.cells[k]}
  const allTargets=people.every(p=>targets[p.id]!==undefined),requestedTotal=Object.values(targets).reduce((a,b)=>a+b,0);
  if(original.autoCapacity)for(let d=1;d<=n;d++)base.days[d].need=clone(original.autoCapacity[d]||base.days[d].need);
  const totalDemand=Object.values(base.days).reduce((s,x)=>s+CODES.reduce((a,c)=>a+x.need[c],0),0);
+ if(!people.length&&totalDemand>0)return{ok:false,reason:'capacity',message:'ยังไม่ได้เลือกบุคลากรลงตารางเดือนนี้ กรุณาเลือกที่เมนูบุคลากร'};
  const flexible=allTargets&&requestedTotal<totalDemand;
  if(allTargets&&requestedTotal>totalDemand)return{ok:false,reason:'capacity',message:'จำนวนที่กรอกรวม '+requestedTotal+' เวร มากกว่าช่องเวรที่เปิดรับรายวัน '+totalDemand+' เวร กรุณาเพิ่มจำนวนที่หัววันที่หรือลดจำนวนเวรที่กรอก'};
  for(const g of SHIFT_GROUPS){const requested=people.reduce((sum,p)=>sum+(categoryGoals[p.id]?.[g.id]||0),0),capacity=Object.values(base.days).reduce((sum,day)=>sum+g.codes.reduce((a,c)=>a+day.need[c],0),0);if(requested>capacity)return{ok:false,reason:'capacity',message:g.label+' ตั้งเป้ารวม '+requested+' เวร แต่เปิดรับไว้ '+capacity+' เวร กรุณาปรับเป้าหรือจำนวนเวรที่หัววันที่'}}
  const fixedIssues=[];
  for(let d=1;d<=n;d++){
   for(let p of people){let c=cell(base,p.id,d);if(!c.code)continue;counts[p.id]++;lockedCounts[p.id]++;if(c.block||!eligibleOnDay(p,month,d,c.code))fixedIssues.push(p.name+' วันที่ '+d+' เวรล็อกชนวันหยุด/สิทธิ์รับเวร (ดึก จ.–ศ. เฉพาะสุขสันต์ นุ่มนวล เกศสรา ปฏิภาณ)');let prev=d===1?boundary(state,month,p,-1):cell(base,p.id,d-1).code;if(restConflict(prev,c.code))fixedIssues.push(p.name+' วันที่ '+d+' เวรล็อก'+restDescription(c.code));const next=boundary(state,month,p,1);if(d===n&&restConflict(c.code,next))fixedIssues.push(p.name+' วันสุดท้าย '+restDescription(next)+'ข้ามเดือน')}
-  if(excl&&excl.length){for(let[x,y]of excl){let cX=cell(base,x,d),cY=cell(base,y,d);if(cX.code&&cY.code){let pX=people.find(p=>p.id===x),pY=people.find(p=>p.id===y);fixedIssues.push('วันที่ '+d+' เวรล็อกของ '+(pX?pX.name:x)+' ชนกับ '+(pY?pY.name:y)+' (ห้ามขึ้นเวรวันเดียวกัน)')}}}
+  if(excl&&excl.length){for(let[x,y]of excl){if(!included.has(x)||!included.has(y))continue;let cX=cell(base,x,d),cY=cell(base,y,d);if(cX.code&&cY.code){let pX=people.find(p=>p.id===x),pY=people.find(p=>p.id===y);fixedIssues.push('วันที่ '+d+' เวรล็อกของ '+(pX?pX.name:x)+' ชนกับ '+(pY?pY.name:y)+' (ห้ามขึ้นเวรวันเดียวกัน)')}}}
   for(let code of CODES){let got=people.filter(p=>cell(base,p.id,d).code===code).length,need=base.days[d].need[code];if(got>need)fixedIssues.push('วันที่ '+d+' เวร '+META[code].name+' ที่ล็อกไว้เกินจำนวน');for(let i=got;i<need;i++)demand.push({d,code})}
  }
  for(let[pid,tgt]of Object.entries(targets)){if(counts[pid]>tgt){let p=people.find(x=>x.id===pid);fixedIssues.push((p?p.name:pid)+' มีเวรล็อกไว้ ('+counts[pid]+' เวร) เกินเป้าหมาย ('+tgt+' เวร)')}}
@@ -98,7 +101,7 @@ function solve(state,month,opts={}){
  for(let d=1;d<=n;d++){let required=demand.filter(s=>s.d===d).length;let available=people.filter(p=>!fixedPeople.has(p.id)&&!cell(base,p.id,d).block&&!cell(base,p.id,d).code&&p.allowed.some(c=>eligibleOnDay(p,month,d,c)&&base.days[d].need[c]>0)).length;if(!flexible&&required>available)return{ok:false,reason:'capacity',message:'วันที่ '+d+' ต้องเพิ่มอีก '+required+' คน แต่มีคนว่าง '+available+' คน (OFF / VAC / เวรล็อก / คนที่จัดเอง / สิทธิ์รับเวร) กรุณาปรับวันหยุดหรือกำลังคน'};}
  for(let slot of demand){let poss=people.filter(p=>!fixedPeople.has(p.id)&&eligibleOnDay(p,month,slot.d,slot.code)&&!cell(base,p.id,slot.d).block&&!cell(base,p.id,slot.d).code);if(!flexible&&!poss.length)return{ok:false,message:'วันที่ '+slot.d+' เวร '+META[slot.code].name+' ไม่มีคนที่ว่างและรับเวรนี้ได้',reason:'capacity'}}
  const active=people.filter(p=>p.active).length,avg=totalDemand/Math.max(active,1);
- let minQ=Math.max(...g.map(id=>counts[id])),maxQ=Math.min(...g.map(id=>{let p=people.find(x=>x.id===id);return p.active&&!fixedPeople.has(id)?Array.from({length:n},(_,i)=>i+1).filter(d=>!cell(base,id,d).block&&(cell(base,id,d).code||p.allowed.some(c=>eligibleOnDay(p,month,d,c)&&base.days[d].need[c]>0))).length:counts[id]}),Math.floor(totalDemand/3));
+ let minQ=g.length?Math.max(...g.map(id=>counts[id])):0,maxQ=g.length?Math.min(...g.map(id=>{let p=people.find(x=>x.id===id);return p.active&&!fixedPeople.has(id)?Array.from({length:n},(_,i)=>i+1).filter(d=>!cell(base,id,d).block&&(cell(base,id,d).code||p.allowed.some(c=>eligibleOnDay(p,month,d,c)&&base.days[d].need[c]>0))).length:counts[id]}),Math.floor(totalDemand/g.length)):0;
  let quotas;
  if(gTarget!==undefined){
   if(gTarget<minQ)return{ok:false,reason:'capacity',message:'เป้าหมายคนลำดับ 2–4 ('+gTarget+' เวร) น้อยกว่าเวรที่ล็อกไว้ ('+minQ+' เวร)'};
@@ -175,8 +178,8 @@ function solve(state,month,opts={}){
    if(excl!==undefined)test.pairExclusions=excl;
    // Resolve blank (auto) targets to the counts actually assigned, so the total
    // shown in the UI always equals the sum of the per-person target fields.
-   m.quotas=Object.fromEntries(people.map(p=>[p.id,targets[p.id]??cnt[p.id]]));
-   m.categoryQuotas=clone(catCnt);
+   m.quotas={...(original.quotas||{}),...Object.fromEntries(people.map(p=>[p.id,targets[p.id]??cnt[p.id]]))};
+   m.categoryQuotas={...(original.categoryQuotas||{}),...Object.fromEntries(people.map(p=>[p.id,clone(catCnt[p.id])]))};
    const a=audit(test,month);
    if(a.complete)return{ok:true,month:m,nodes,quota:q,dawnBalanced:strictR};
    return{ok:false,message:'ผลจัดเวรยังไม่ผ่านการตรวจ: '+(a.issues[0]?.text||'กรุณาตรวจการตั้งค่า')};
@@ -190,11 +193,12 @@ function solve(state,month,opts={}){
 function manualRange(state,month,id,start,end,value){
  const p=state.people.find(p=>p.id===id),n=daysIn(month);
  if(!p||!Number.isInteger(start)||!Number.isInteger(end)||Math.min(start,end)<1||Math.max(start,end)>n||!['',...CODES,'OFF','VAC'].includes(value))return{ok:false,message:'เลือกคน วันที่ และชนิดเวรให้ถูกต้อง'};
+ if(!monthPeople(state,month).some(person=>person.id===id))return{ok:false,message:'บุคลากรคนนี้ไม่ได้ลงตารางเดือนนี้'};
  const code=CODES.includes(value)?value:'',block=['OFF','VAC'].includes(value)?value:'';
  if(code&&(!p.active||!p.allowed.includes(code)))return{ok:false,message:p.name+' ไม่ได้เปิดรับเวรประเภทนี้ · ยังไม่ได้แก้ไขทุกช่องที่เลือก'};
  const m=clone(state.months[month]),lo=Math.min(start,end),hi=Math.max(start,end);let changed=0;
  if(code)for(let d=lo;d<=hi;d++)if(!eligibleOnDay(p,month,d,code))return{ok:false,message:'วันที่ '+d+' เวรดึก จ.–ศ. รับได้เฉพาะสุขสันต์ นุ่มนวล เกศสรา และปฏิภาณ · ยังไม่ได้แก้ไขทุกช่องที่เลือก'};
- if(code){for(let d=lo;d<=hi;d++){const other=state.people.find(other=>isExcludedPair(p.id,other.id,state.pairExclusions??DEFAULT_PAIR_EXCLUSIONS)&&cell(m,other.id,d).code);if(other)return{ok:false,message:'วันที่ '+d+' '+p.name+' ห้ามมีเวรวันเดียวกับ '+other.name+' · ยังไม่ได้แก้ไขทุกช่องที่เลือก'}}}
+ if(code){for(let d=lo;d<=hi;d++){const other=monthPeople(state,month).find(other=>isExcludedPair(p.id,other.id,state.pairExclusions??DEFAULT_PAIR_EXCLUSIONS)&&cell(m,other.id,d).code);if(other)return{ok:false,message:'วันที่ '+d+' '+p.name+' ห้ามมีเวรวันเดียวกับ '+other.name+' · ยังไม่ได้แก้ไขทุกช่องที่เลือก'}}}
  for(let d=lo;d<=hi;d++){
   const old=cell(m,id,d),next={code,block,locked:!!code};
   if(old.code!==code||old.block!==block||old.locked!==next.locked){m.cells[key(id,d)]=next;changed++}
@@ -206,4 +210,4 @@ function manualRange(state,month,id,start,end,value){
  if(hi===n&&restConflict(cell(m,id,n).code,boundary(state,month,p,1)))return{ok:false,message:restDescription(boundary(state,month,p,1))+'ข้ามเดือน · ยังไม่ได้แก้ไขทุกช่องที่เลือก'};
  return{ok:true,month:m,changed};
 }
-if(typeof module!=='undefined')module.exports={CODES,META,DEFAULT_PAY_RATES,DEFAULT_PAIR_EXCLUSIONS,MAIN_STAFF_IDS,WEEKDAY_NIGHT_IDS,SHIFT_GROUPS,clone,key,isExcludedPair,daysIn,weekday,monthOffset,freshMonth,cell,manualPeople,group,eligibleOnDay,restConflict,restDescription,categoryTotals,categoryTargets,quotaTargets,payRate,dawnTargets,boundary,totals,audit,solve,manualRange};
+if(typeof module!=='undefined')module.exports={CODES,META,DEFAULT_PAY_RATES,DEFAULT_PAIR_EXCLUSIONS,MAIN_STAFF_IDS,WEEKDAY_NIGHT_IDS,SHIFT_GROUPS,clone,key,isExcludedPair,daysIn,weekday,monthOffset,freshMonth,cell,manualPeople,monthPeople,group,eligibleOnDay,restConflict,restDescription,categoryTotals,categoryTargets,quotaTargets,payRate,totalPay,dawnTargets,boundary,totals,audit,solve,manualRange};

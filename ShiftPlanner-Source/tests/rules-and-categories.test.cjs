@@ -26,7 +26,7 @@ for(const early of ['N','R','X']){
  put(s,'2',30,'A');assert(c.audit(s,month).issues.some(i=>i.type==='rest'&&i.d===30));assert.equal(c.solve(s,month).reason,'fixed');
 }
 console.log('PASS: weekday night whitelist, weekend/holiday behavior, atomic painting, both rest directions and adjacent months');
-function shortRoster(){const s=fresh();for(const[d,day]of Object.entries(s.months[month].days))day.need=+d<=8?{N:1,M:0,A:1,R:1,X:1}:{N:0,M:0,A:0,R:0,X:0};return s}
+function shortRoster(){const s=fresh();s.people=s.people.slice(0,8);for(const[d,day]of Object.entries(s.months[month].days))day.need=+d<=8?{N:1,M:0,A:1,R:1,X:1}:{N:0,M:0,A:0,R:0,X:0};return s}
 s=shortRoster();s.months[month].categoryQuotas=Object.fromEntries(s.people.map(p=>[p.id,{card:2,dawn:1,outreach:1}]));
 before=JSON.stringify(s);let result=c.solve(s,month,{ms:10000});assert(result.ok,result.message);assert.equal(JSON.stringify(s),before);
 s.months[month]=result.month;assert(c.audit(s,month).complete);

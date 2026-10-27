@@ -2,11 +2,12 @@
 const PAINT_TOOLS=[['N','ดึก','1'],['M','เช้า','2'],['A','บ่าย','3'],['R','ห้องบัตร','4'],['X','รพ.สต.','5'],['OFF','หยุด','6'],['VAC','ลา','7'],['','ยางลบ','0']];
 let paintTool=null,paintDrag=null,paintFocus={i:0,d:1},paintRange=null,paintFrame=0;
 const schedule=$('scheduleTable');
+function paintRows(){const included=new Set(monthPeople(state,state.selected).map(p=>p.id));return state.people.map((p,i)=>included.has(p.id)?i:-1).filter(i=>i>=0)}
 function toolName(code){return PAINT_TOOLS.find(t=>t[0]===code)?.[1]||'ดู / แก้รายช่อง'}
 function setPaintTool(code){cancelPaint();paintTool=code;renderEditor()}
 function renderEditor(){
  if(!$('paintTools'))return;
- paintFocus.i=Math.min(paintFocus.i,state.people.length-1);paintFocus.d=Math.min(paintFocus.d,daysIn(state.selected));
+ const rows=paintRows();if(!rows.includes(paintFocus.i))paintFocus.i=rows[0]??0;paintFocus.d=Math.min(paintFocus.d,daysIn(state.selected));
  $('paintTools').innerHTML=PAINT_TOOLS.map(([code,name,shortcut])=>'<button class="paint-tool '+(paintTool===code?'chosen':'')+'" data-tool="'+code+'" aria-pressed="'+(paintTool===code)+'" title="'+name+' · คีย์ '+shortcut+'"><span class="chip '+code+'">'+(META[code]?.label||code||'ลบ')+'</span><span>'+name+'</span><kbd>'+shortcut+'</kbd></button>').join('');
  $('inspectTool').setAttribute('aria-pressed',String(paintTool===null));
  schedule.classList.toggle('paint-enabled',paintTool!==null);
@@ -16,7 +17,9 @@ function renderEditor(){
 }
 function paintButton(i,d){return schedule.querySelector('[data-i="'+i+'"][data-d="'+d+'"]')}
 function focusPaint(i,d){
- paintFocus={i:Math.max(0,Math.min(state.people.length-1,i)),d:Math.max(1,Math.min(daysIn(state.selected),d))};
+ const rows=paintRows();if(!rows.length)return;
+ const visible=rows.includes(i)?i:i<paintFocus.i?([...rows].reverse().find(row=>row<=i)??rows[0]):(rows.find(row=>row>=i)??rows[rows.length-1]);
+ paintFocus={i:visible,d:Math.max(1,Math.min(daysIn(state.selected),d))};
  for(const b of schedule.querySelectorAll('.cell-btn'))b.tabIndex=-1;
  const b=paintButton(paintFocus.i,paintFocus.d);if(b){b.tabIndex=0;b.focus({preventScroll:true});b.scrollIntoView({block:'nearest',inline:'nearest'})}
 }
