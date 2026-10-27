@@ -58,7 +58,7 @@ assert.deepEqual(mainGroup.map(t=>t.R),[3,3,3]);assert(c.categoryTotals(mainGrou
 for(const d of Array.from({length:20},(_,i)=>i+1))assert.equal(c.cell(result.month,'3',d).block,d%2?'OFF':'VAC');
 assert(c.audit({...s,months:{[s.selected]:result.month}},s.selected).complete);
 // Unequal personal dawn targets remain supported.
-s=redDays(fresh(),dates);const goals=[4,5,2,5,4,4,3,3,1];s.months[s.selected].categoryQuotas=Object.fromEntries(s.people.map((p,i)=>[p.id,{card:0,dawn:goals[i]}]));
+s=redDays(fresh(),dates);const goals=[4,5,3,5,3,3,3,4,1];s.months[s.selected].categoryQuotas=Object.fromEntries(s.people.map((p,i)=>[p.id,{card:0,dawn:goals[i]}]));
 result=c.solve(s,s.selected,{distribution:true});assert(result.ok,result.message);
 ts=c.totals({...s,months:{[s.selected]:result.month}},s.selected);assert.deepEqual(ts.map(t=>t.R+t.X),goals);assert(c.audit({...s,months:{[s.selected]:result.month}},s.selected).complete);
 // Card goals for 2–4 are also independent and can differ in a complete schedule.

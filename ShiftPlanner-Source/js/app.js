@@ -26,7 +26,8 @@ function activeMonth(){return state.months[state.selected]}
 function scheduleAudit(){return audit(state,state.selected,{distribution:true})}
 function save(){try{localStorage.setItem(STORE,JSON.stringify(state));$('saveStatus').textContent='บันทึกในเครื่องแล้ว'}catch(e){$('saveStatus').textContent='บันทึกในเครื่องไม่ได้ — กรุณาสำรองไฟล์'}}
 function checkpoint(){history.push(clone(state));if(history.length>25)history.shift()}
-function changed(){save();render()}
+function normalizeCalendarState(s){let changed=false;for(const month of Object.keys(s.months))if(normalizeCalendarDemand(s,month))changed=true;return changed}
+function changed(){normalizeCalendarState(state);save();render()}
 function undo(){if(!history.length)return;state=history.pop();changed();toast('ย้อนการแก้ไขแล้ว')}
 function toast(s){$('toast').textContent=s;$('toast').classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),4500)}
 function view(v){currentView=v;$('scheduleView').classList.toggle('hidden',v!=='schedule');$('summaryView').classList.toggle('hidden',v!=='summary');$('navSchedule').classList.toggle('active',v==='schedule');$('navSummary').classList.toggle('active',v==='summary')}
@@ -40,7 +41,7 @@ function personCategoryTotal(s,month,id){return SHIFT_GROUPS.reduce((sum,g)=>sum
 function personTotal(p){return totalEditor(p,{id:'total',label:'รวม'})}
 function totalEditor(p,kind){
  const info=categoryCountInfo(state,state.selected,p.id,kind.id),isTotal=kind.id==='total';
- return '<div class="total-editor"><input type="number" min="0" max="'+daysIn(state.selected)+'" step="1" inputmode="numeric" class="quota-input'+(isTotal?' person-total':'')+'" data-quota-id="'+esc(p.id)+'" data-quota-category="'+kind.id+'" value="'+info.value+'"'+(isTotal?' data-person-total="'+esc(p.id)+'"':'')+' title="ลงแล้ว '+info.actual+' เวร · '+(isTotal?'กรอกเป้ารวมเพื่อให้ระบบแบ่งห้องบัตรและรุ่งอรุณใหม่ แทนเป้าแยกประเภทของคนนี้ · ล้างเพื่อกลับมาบวกสองช่อง':'พิมพ์ตัวเลขเพื่อกำหนดเป้า หรือล้างเพื่อกลับมานับอัตโนมัติ')+'" aria-label="'+kind.label+' จำนวนเวร '+esc(p.name)+'" oninput="this.dataset.quotaEdited=\'true\';onQuotaInput(this,\''+p.id+'\',\''+kind.id+'\')" onchange="this.dataset.quotaEdited=\'false\';onQuotaChange(\''+p.id+'\',this.value,\''+kind.id+'\')" onblur="if(this.dataset.quotaEdited===\'true\'){this.dataset.quotaEdited=\'false\';onQuotaChange(\''+p.id+'\',this.value,\''+kind.id+'\')}"><small class="quota-status" data-quota-status="'+esc(p.id)+'" data-category="'+kind.id+'" data-state="'+info.status+'" title="ลงแล้ว '+info.actual+' เวร">'+info.hint+'</small></div>';
+ return '<div class="total-editor"><input type="number" min="0" max="'+daysIn(state.selected)+'" step="1" inputmode="numeric" class="quota-input'+(isTotal?' person-total':'')+'" data-quota-id="'+esc(p.id)+'" data-quota-category="'+kind.id+'" value="'+info.value+'"'+(isTotal?' data-person-total="'+esc(p.id)+'"':'')+' title="ลงแล้ว '+info.actual+' เวร · '+(isTotal?'กรอกเป้ารวมเพื่อให้ระบบแบ่งห้องบัตรและรุ่งอรุณใหม่ แทนเป้าแยกประเภทของคนนี้ · ล้างเพื่อกลับมาบวกสองช่อง':'พิมพ์ตัวเลขเพื่อกำหนดเป้า หรือล้างเพื่อกลับมานับอัตโนมัติ')+'" aria-label="'+kind.label+' จำนวนเวร '+esc(p.name)+'" oninput="this.dataset.quotaEdited=\'true\';onQuotaInput(this,\''+p.id+'\',\''+kind.id+'\')" onchange="this.dataset.quotaEdited=\'false\';onQuotaChange(\''+p.id+'\',this.value,\''+kind.id+'\')" onblur="if(this.dataset.quotaEdited===\'true\'){this.dataset.quotaEdited=\'false\';onQuotaChange(\''+p.id+'\',this.value,\''+kind.id+'\')}"></div>';
 }
 function targetSum(s,month){
  const categories=categoryTargets(s,month);let total;
@@ -48,21 +49,30 @@ function targetSum(s,month){
  return monthPeople(s,month).reduce((sum,p)=>sum+(total[p.id]??personCategoryTotal(s,month,p.id)),0);
 }
 function categoryTargetSums(s,month){return Object.fromEntries(SHIFT_GROUPS.map(g=>[g.id,monthPeople(s,month).reduce((sum,p)=>sum+categoryCountInfo(s,month,p.id,g.id).value,0)]))}
+function calendarDemandModal(){
+ const d=calendarDemand(state,state.selected);
+ modal('จำนวนเวรจากปฏิทิน','<p><b>'+esc(monthLabel(state.selected))+'</b></p><p>วันธรรมดา '+d.regularDays+' วัน × 2 เวร = '+(d.regularDays*2)+' เวร<br>ดึก 1 + บ่าย 1 ต่อวัน</p><p>เสาร์–อาทิตย์และวันหยุดพิเศษ '+d.holidayDays+' วัน × 4 เวร = '+(d.holidayDays*4)+' เวร<br>เช้า 2 + บ่าย 1 + ดึก 1 ต่อวัน<br>วันหยุดพิเศษที่ตรงเสาร์–อาทิตย์นับเพียงครั้งเดียว</p><p><b>ห้องบัตรทั้งหมด '+d.card+' เวร</b> — ตรงกับกล่องเวรทั้งหมด</p><p>รุ่งอรุณแสดงแยก: หน้าตู้KIOS '+d.R+' + รพ.สต. '+d.X+' = '+d.dawn+' เวร<br>หากรวมทุกประเภทจะเป็น '+d.total+' เวร</p><p class="help">กำหนดวันหยุดพิเศษที่หัววันที่ ระบบคำนวณใหม่ให้ทันที OFF / Vac ของบุคลากรใช้กันวันรับเวร ไม่ได้ลดจำนวนเวรของเดือน</p>');
+}
+function dawnShareInfo(s,month){const plan=distributionPlan(s,month),count=new Set([...(plan.totalR?plan.rIds:[]),...(plan.totalX?plan.xIds:[])]).size,total=plan.totalR+plan.totalX,low=count?Math.floor(total/count):0,high=count?Math.ceil(total/count):0;return{plan,count,total,range:low+(low!==high?'–'+high:'')}}
+function dawnPlanHint(s){const info=dawnShareInfo(s,s.selected);return'เปิด '+info.total+' เวร · '+(info.count?'เฉลี่ย '+info.range+' / คน':'ไม่มีผู้รับเวร')}
+function dawnPlanModal(){
+ const info=dawnShareInfo(state,state.selected),plan=info.plan;
+ const rows=monthPeople(state,state.selected).filter(p=>p.active).map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+(plan.preferredR[p.id]||0)+'</td><td>'+(plan.preferredX[p.id]||0)+'</td><td><b>'+((plan.preferredR[p.id]||0)+(plan.preferredX[p.id]||0))+'</b></td></tr>').join('');
+ modal('สัดส่วนเวรรุ่งอรุณ','<p>เปิดทั้งหมด <b>'+info.total+' เวร</b> = หน้าตู้KIOS '+plan.totalR+' + รพ.สต. '+plan.totalX+' เวร<br>'+(info.count?'เฉลี่ย '+info.total+' ÷ '+info.count+' คน = <b>คนละ '+info.range+' เวร</b>':'ยังไม่มีผู้รับเวรในประเภทที่เปิด')+'</p><p>จำนวนแนะนำด้านล่างปรับตามสิทธิ์รับเวร วันว่าง และเป้าปัจจุบัน นายปรเมศวร์รับเฉพาะ รพ.สต. ผลจัดจริงอาจต่างตาม OFF / Vac เวรล็อก และข้อจำกัดรายวัน</p>'+(plan.error?'<p class="warning">'+esc(plan.error)+'</p>':'')+'<table class="dawn-plan-table"><thead><tr><th>บุคลากร</th><th>หน้าตู้KIOS</th><th>รพ.สต.</th><th>รวมรุ่งอรุณ</th></tr></thead><tbody>'+rows+'</tbody></table><p>นวก. มีเวรรวมห้องบัตร + รุ่งอรุณไม่เกินตัวหลักทุกคน เวรห้องบัตรส่วนเพิ่มให้ตัวหลักก่อน รพีพรรณมีลำดับรองจากตัวหลัก</p>','<button class="btn primary" onclick="closeModal()">ปิด</button>');
+}
 function updateTargetTotals(s,skipInput=null){
- $('quotaTotal').textContent=targetSum(s,s.selected);const sums=categoryTargetSums(s,s.selected);for(const g of SHIFT_GROUPS)$('categoryTotal-'+g.id).textContent=sums[g.id];
+ const actual=totals(s,s.selected);for(const g of SHIFT_GROUPS)$('categoryTotal-'+g.id).textContent=actual.reduce((sum,t)=>sum+categoryTotals(t)[g.id],0);
+ $('dawnPlanHint').textContent=dawnPlanHint(s);
  document.querySelectorAll('[data-person-total]').forEach(el=>{if(el!==skipInput)el.value=categoryCountInfo(s,s.selected,el.dataset.personTotal,'total').value});
- document.querySelectorAll('[data-quota-status]').forEach(el=>{const info=categoryCountInfo(s,s.selected,el.dataset.quotaStatus,el.dataset.category);el.textContent=info.hint;el.dataset.state=info.status;el.title='ลงแล้ว '+info.actual+' เวร'});
 }
 function render(){
  const month=state.selected,m=activeMonth(),n=daysIn(month),report=scheduleAudit(),tt=report.totals,included=new Set(monthPeople(state,month).map(p=>p.id));
  $('monthPicker').value=month;$('monthTitle').textContent=monthLabel(month);$('summaryMonth').textContent='· '+monthLabel(month);$('totalsMonth').textContent=monthLabel(month);
- const categorySums=categoryTargetSums(state,month);
+ const categorySums=Object.fromEntries(SHIFT_GROUPS.map(g=>[g.id,tt.reduce((sum,t)=>sum+categoryTotals(t)[g.id],0)])),demand=calendarDemand(state,month);
  $('sourceNote').textContent='ตารางประจำเดือน · กรุณาเพิ่มวันหยุดราชการของเดือนนี้';
  $('undoBtn').disabled=!history.length;
- const assigned=tt.reduce((s,x)=>s+x.total,0);
- const targetTotal=targetSum(state,month);
- $('categoryTotals').innerHTML=SHIFT_GROUPS.map(g=>'<div class="total-pill total-pill-'+g.id+'"><span>'+g.label+'</span><strong id="categoryTotal-'+g.id+'" aria-label="ผลรวม '+g.label+'" aria-live="polite">'+categorySums[g.id]+'</strong><small>เวร</small></div>').join('')+
-  '<div class="total-pill total-pill-all" title="จำนวนเวรที่จัดแล้ว / จำนวนที่กรอก"><span>จำนวนเวรทั้งหมด</span><strong>'+assigned+'</strong><small>/ <span id="quotaTotal">'+targetTotal+'</span> เวร</small></div>'+
+
+ $('categoryTotals').innerHTML='<div class="total-pill total-pill-all"><span>เวรทั้งหมด<button class="dawn-plan-hint" onclick="calendarDemandModal()" title="จำนวนเวรห้องบัตรจากปฏิทิน">'+demand.regularDays+' วัน × 2 + '+demand.holidayDays+' วัน × 4</button></span><strong id="calendarCardTotal" aria-live="polite">'+demand.card+'</strong><small>เวร</small></div>'+SHIFT_GROUPS.map(g=>'<div class="total-pill total-pill-'+g.id+'"><span>'+(g.id==='card'?'ลงแล้ว':g.label)+(g.id==='dawn'?'<button id="dawnPlanHint" class="dawn-plan-hint" onclick="dawnPlanModal()" title="ดูจำนวนรุ่งอรุณที่เปิดและสัดส่วนแนะนำรายคน">'+dawnPlanHint(state)+'</button>':'')+'</span><strong id="categoryTotal-'+g.id+'" aria-label="ผลรวม '+g.label+'" aria-live="polite">'+categorySums[g.id]+'</strong><small>เวร</small></div>').join('')+
   '<button type="button" class="total-pill total-pill-issues'+(report.complete?' complete':'')+'" onclick="issuesModal()" title="เปิดรายละเอียดตรวจเงื่อนไข"><span>รายการที่ต้องตรวจ</span><strong id="issueCount" aria-live="polite">'+report.issues.length+'</strong><small>รายการ</small></button>';
  let invalid=new Set(report.issues.filter(i=>i.p&&i.d).map(i=>key(i.p,i.d))),head='<thead><tr><th class="person">บุคลากร <span style="font-size:16px;color:#8da097">/ วันที่</span></th>';
  for(let d=1;d<=n;d++){let h=m.days[d].holiday||[0,6].includes(weekday(month,d)),outreach=m.days[d].need.X;head+='<th class="'+(h?'holiday':'')+'"><button class="day-head" onclick="dayModal('+d+')" title="'+esc((m.days[d].note||'กำหนดจำนวนเวร')+(outreach?' · ออก รพ.สต. '+outreach+' คน':''))+'"><b>'+d+'</b><small>'+['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'][weekday(month,d)]+'</small>'+(outreach?'<span class="outreach-day">รพ.สต.</span>':'')+'</button></th>'}
@@ -123,7 +133,7 @@ function saveCell(){
 }
 function dayModal(d){
  editing={d};let item=activeMonth().days[d],weekend=[0,6].includes(weekday(state.selected,d));
- modal('วันที่ '+d+' '+monthLabel(state.selected),'<label class="inline-field"><input type="checkbox" id="dayHoliday" '+(item.holiday?'checked':'')+' '+(weekend?'disabled':'')+' onchange="holidayPreset('+d+')"> '+(weekend?'เสาร์ / อาทิตย์ (ใช้เวรวันหยุด)':'วันหยุดราชการ / วันหยุดพิเศษ')+'</label><label class="field">ชื่อวันหยุด / หมายเหตุ<input id="dayNote" value="'+esc(item.note)+'" placeholder="เช่น วันหยุดชดเชย"></label><div class="help">จำนวนคนที่ต้องการในวันที่นี้</div>'+CODES.map(c=>'<label class="inline-field"><span class="chip '+c+'">'+META[c].label+'</span><span style="flex:1">'+META[c].name+'<small style="display:block;color:#8b9c90">'+META[c].time+'</small></span><input id="need'+c+'" type="number" min="0" max="'+state.people.length+'" value="'+item.need[c]+'"> คน</label>').join('')+'<p class="help">ร สีฟ้า หน้าตู้KIOS เริ่มต้นมีทุก จ.–ศ. รวมวันที่เป็นวันหยุดราชการ ปรับจำนวนได้ตามการปฏิบัติงานจริง · ร สีแดงใส่จำนวนในวันที่ออก รพ.สต.</p>','<button onclick="closeModal()">ยกเลิก</button><button class="primary" onclick="saveDay()">บันทึกวันที่นี้</button>')
+ modal('วันที่ '+d+' '+monthLabel(state.selected),'<label class="inline-field"><input type="checkbox" id="dayHoliday" '+(item.holiday||weekend?'checked':'')+' '+(weekend?'disabled':'')+' onchange="holidayPreset('+d+')"> '+(weekend?'เสาร์ / อาทิตย์ (ใช้เวรวันหยุด)':'วันหยุดราชการ / วันหยุดพิเศษ')+'</label><label class="field">ชื่อวันหยุด / หมายเหตุ<input id="dayNote" value="'+esc(item.note)+'" placeholder="เช่น วันหยุดชดเชย"></label><div class="help">ห้องบัตรคำนวณจากปฏิทิน: วันธรรมดา ดึก 1 / บ่าย 1 · วันหยุด เช้า 2 / บ่าย 1 / ดึก 1</div>'+CODES.map(c=>'<label class="inline-field"><span class="chip '+c+'">'+META[c].label+'</span><span style="flex:1">'+META[c].name+'<small style="display:block;color:#8b9c90">'+META[c].time+'</small></span><input id="need'+c+'" type="number" min="0" max="'+state.people.length+'" value="'+item.need[c]+'" '+(['N','M','A'].includes(c)?'readonly aria-readonly="true"':'')+'> คน</label>').join('')+'<p class="help">ร สีฟ้า หน้าตู้KIOS เริ่มต้นมีทุก จ.–ศ. รวมวันที่เป็นวันหยุดราชการ ปรับจำนวนได้ตามการปฏิบัติงานจริง · ร สีแดงใส่จำนวนในวันที่ออก รพ.สต.</p>','<button onclick="closeModal()">ยกเลิก</button><button class="primary" onclick="saveDay()">บันทึกวันที่นี้</button>')
 }
 function holidayPreset(d){let holiday=$('dayHoliday').checked||[0,6].includes(weekday(state.selected,d));$('needN').value=1;$('needM').value=holiday?2:0;$('needA').value=1}
 function saveDay(){let d=editing.d,need={};for(let c of CODES){let v=Number($('need'+c).value);if(!Number.isInteger(v)||v<0||v>state.people.length){toast('จำนวนคนต้องเป็นจำนวนเต็ม 0–'+state.people.length);return}need[c]=v}checkpoint();if(activeMonth().autoCapacity)activeMonth().autoCapacity[d]=clone(need);activeMonth().days[d]={holiday:$('dayHoliday').checked,note:$('dayNote').value.trim(),need};changed();closeModal();toast('บันทึกจำนวนเวรแล้ว')}
@@ -131,7 +141,7 @@ async function autoSchedule(){
  try{commitPendingQuotaInputs()}catch(e){modal('ตรวจเป้าจำนวนเวรก่อนจัด','<div class="issue">'+esc(e.message)+'</div>');return}
  let btn=$('autoBtn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>กำลังจัดเวร…';
  await new Promise(r=>setTimeout(r,60));
- try{let result=solve(state,state.selected,{distribution:true});if(result.ok){checkpoint();state.months[state.selected]=result.month;changed();toast('จัดครบทุกเวรแล้ว · กระจายตามวันว่างและเป้ารายคน')}else modal('ยังจัดให้ครบทุกเงื่อนไขไม่ได้','<div class="issue">'+esc(result.message)+'</div><p class="help">ข้อมูลเดิมยังอยู่ครบ ระบบจะไม่ฝืนลงเวรในวัน OFF / VAC หรือทำบ่ายต่อดึก / ร ทั้งสองสี</p>')}
+ try{let result=solve(state,state.selected,{distribution:true,calendar:true});if(result.ok){checkpoint();state.months[state.selected]=result.month;changed();toast('จัดครบทุกเวรแล้ว · กระจายตามวันว่างและเป้ารายคน')}else modal('ยังจัดให้ครบทุกเงื่อนไขไม่ได้','<div class="issue">'+esc(result.message)+'</div><p class="help">ข้อมูลเดิมยังอยู่ครบ ระบบจะไม่ฝืนลงเวรในวัน OFF / VAC หรือทำบ่ายต่อดึก / ร ทั้งสองสี</p>')}
  catch(e){modal('เกิดข้อผิดพลาด','<p>จัดเวรไม่สำเร็จ ข้อมูลเดิมยังอยู่ กรุณาตรวจการตั้งค่าและลองใหม่</p>')}
  finally{btn.disabled=false;btn.innerHTML='✧ จัดเวรอัตโนมัติ'}
 }
@@ -215,6 +225,7 @@ function validateBackup(s){
  for(let[month,m]of Object.entries(s.months)){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||+month.slice(0,4)<1900||+month.slice(0,4)>2200||!m.cells||!m.days)throw Error('ข้อมูลเดือนไม่ถูกต้อง');for(let d=1;d<=daysIn(month);d++){let day=m.days[d];if(!day||typeof day.holiday!=='boolean'||typeof day.note!=='string'||!day.need)throw Error('ข้อมูลวันที่ไม่ครบ');for(let c of CODES)if(!Number.isInteger(day.need[c])||day.need[c]<0||day.need[c]>s.people.length)throw Error('จำนวนคนไม่ถูกต้อง')}
  if(m.excludedStaffIds!==undefined&&(!Array.isArray(m.excludedStaffIds)||new Set(m.excludedStaffIds).size!==m.excludedStaffIds.length||m.excludedStaffIds.some(id=>!ids.has(id))))throw Error('รายชื่อบุคลากรประจำเดือนไม่ถูกต้อง');
  if(m.autoFillStaffIds!==undefined&&(!Array.isArray(m.autoFillStaffIds)||new Set(m.autoFillStaffIds).size!==m.autoFillStaffIds.length||m.autoFillStaffIds.some(id=>!ids.has(id))))throw Error('รายชื่อบุคลากรที่ให้จัดเติมไม่ถูกต้อง');
+ if(m.calendarRules!==undefined&&typeof m.calendarRules!=='boolean')throw Error('กติกาจำนวนเวรจากปฏิทินไม่ถูกต้อง');
  if(m.distributionRules!==undefined&&typeof m.distributionRules!=='boolean')throw Error('เงื่อนไขกระจายเวรไม่ถูกต้อง');
  if(m.autoCapacity){for(let[d,need]of Object.entries(m.autoCapacity)){if(!Number.isInteger(+d)||+d<1||+d>daysIn(month)||!need||CODES.some(c=>!Number.isInteger(need[c])||need[c]<0||need[c]>s.people.length))throw Error('ข้อมูลช่องเวรอัตโนมัติไม่ถูกต้อง')}}
  if(m.boundaries){for(let[id,b]of Object.entries(m.boundaries)){if(!ids.has(id)||!b||!['',...CODES,'OFF','VAC'].includes(b.prev)||!['',...CODES,'OFF','VAC'].includes(b.next))throw Error('ข้อมูลเวรข้ามเดือนไม่ถูกต้อง')}}
@@ -230,6 +241,7 @@ function validateBackup(s){
 }
 async function importBackup(input){let file=input.files[0];input.value='';if(!file)return;if(file.size>5000000){toast('ไฟล์ใหญ่เกิน 5 MB');return}try{let s=JSON.parse(await file.text());validateBackup(s);editing={importState:s};modal('นำเข้าข้อมูลสำรอง','<p>พบข้อมูล '+s.people.length+' คน · '+Object.keys(s.months).length+' เดือน</p><p class="help">ข้อมูลในเบราว์เซอร์จะถูกแทนที่ด้วยไฟล์นี้ ย้อนกลับได้ด้วยปุ่ม ↶ ย้อนกลับ</p>','<button onclick="closeModal()">ยกเลิก</button><button class="primary" onclick="confirmImport()">นำเข้าข้อมูลนี้</button>')}catch(e){toast('นำเข้าไม่ได้: '+e.message)}}
 function confirmImport(){let s=editing.importState;checkpoint();state=s;addNinthStaff(state);restrictNinthStaff(state);normalizePayRates(state);clearManualBoundaries(state);state.pairExclusions=clone(DEFAULT_PAIR_EXCLUSIONS);changed();closeModal();toast('นำเข้าข้อมูลสำรองแล้ว')}
+const normalizedCalendar=normalizeCalendarState(state);
 render();
-if(addedNinthStaff||restrictedNinthStaff||normalizedPayRates)save();
+if(addedNinthStaff||restrictedNinthStaff||normalizedPayRates||normalizedCalendar)save();
 if(removedLegacySample){save();toast('ลบตัวอย่างเดือนตุลาคมแล้ว · ย้อนกลับได้ด้วยปุ่ม ↶ ย้อนกลับ')}

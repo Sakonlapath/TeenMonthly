@@ -15,6 +15,21 @@ function daysIn(month){let [y,m]=month.split('-').map(Number);return new Date(y,
 function weekday(month,d){let[y,m]=month.split('-').map(Number);return new Date(y,m-1,d).getDay()}
 function monthOffset(month,off){let[y,m]=month.split('-').map(Number),dt=new Date(y,m-1+off,1);return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')}
 function freshMonth(month){let days={};for(let d=1;d<=daysIn(month);d++){let wk=weekday(month,d)>0&&weekday(month,d)<6;days[d]={holiday:false,note:'',need:{N:1,M:wk?0:2,A:1,R:wk?1:0,X:0}}}return{cells:{},days}}
+function calendarDemand(state,month){
+ const m=state.months[month],people=monthPeople(state,month),needs={};let holidayDays=0,R=0,X=0;
+ for(let d=1;d<=daysIn(month);d++){
+  const holiday=m.days[d].holiday||[0,6].includes(weekday(month,d)),stored=m.autoCapacity?.[d]||m.days[d].need;
+  const early=code=>Math.max(stored[code]??0,people.filter(p=>{const c=cell(m,p.id,d);return c.locked&&c.code===code}).length);
+  needs[d]={N:1,M:holiday?2:0,A:1,R:early('R'),X:early('X')};if(holiday)holidayDays++;R+=needs[d].R;X+=needs[d].X;
+ }
+ const regularDays=daysIn(month)-holidayDays,card=regularDays*2+holidayDays*4;
+ return{needs,regularDays,holidayDays,card,R,X,dawn:R+X,total:card+R+X};
+}
+function normalizeCalendarDemand(state,month){
+ const m=state.months[month],demand=calendarDemand(state,month);let changed=m.calendarRules!==true||!!m.autoCapacity;
+ for(const [d,need]of Object.entries(demand.needs)){if(CODES.some(code=>m.days[d].need[code]!==need[code]))changed=true;m.days[d].need=need}
+ m.calendarRules=true;delete m.autoCapacity;return changed;
+}
 function cell(m,p,d){return m.cells[key(p,d)]||{code:'',block:'',locked:false}}
 function manualPeople(m){return new Set(Object.entries(m.cells).filter(([,c])=>c.code&&c.locked).map(([k])=>k.split('|')[0]))}
 function monthPeople(state,month){const excluded=new Set(state.months[month].excludedStaffIds||[]);return state.people.filter(p=>!excluded.has(p.id))}
@@ -70,7 +85,7 @@ function normalizePayRates(state){
  return changed;
 }
 function totalPay(state,t){return PAY_GROUPS.reduce((sum,g)=>sum+g.codes.reduce((count,code)=>count+t[code],0)*Math.round(payRate(state,t.id,g.id)*100),0)/100}
-function distributionPlan(state,month){
+function distributionPlan(state,month,options={}){
  const m=state.months[month],n=daysIn(month),people=monthPeople(state,month).filter(p=>p.active),roster=code=>people.filter(p=>canUseSymbol(p,code)&&p.allowed.includes(code)).map(p=>p.id);
  const rIds=roster('R'),xIds=roster('X'),need=(d,code)=>m.autoCapacity?.[d]?.[code]??m.days[d].need[code],total=code=>Object.keys(m.days).reduce((sum,d)=>sum+need(d,code),0);
  const totalR=total('R'),totalX=total('X'),rMin=rIds.length?Math.floor(totalR/rIds.length):0,rMax=rIds.length?Math.ceil(totalR/rIds.length):0,main=new Set(state.mainStaffIds||MAIN_STAFF_IDS),excl=state.pairExclusions??DEFAULT_PAIR_EXCLUSIONS;
@@ -82,12 +97,34 @@ function distributionPlan(state,month){
   return need(d,code)>0&&eligibleOnDay(p,month,d,code)&&!c.block&&(!c.locked||c.code===code)&&!restConflict(previous,code)&&!people.some(other=>other.id!==p.id&&isExcludedPair(p.id,other.id,excl)&&cell(m,other.id,d).locked&&cell(m,other.id,d).code);
  });
  const available=Object.fromEntries(people.map(p=>[p.id,Object.fromEntries(CODES.map(code=>[code,daysFor(p,code)]))]));
+ const workCapacity=Object.fromEntries(people.map(p=>[p.id,new Set(CODES.flatMap(code=>available[p.id][code])).size]));
+ const cardCapacity=Object.fromEntries(people.map(p=>[p.id,new Set(['N','M','A'].flatMap(code=>available[p.id][code])).size]));
+ const earlyCapacity=Object.fromEntries(people.map(p=>[p.id,new Set(['R','X'].flatMap(code=>available[p.id][code])).size]));
+ const preferredTotal={},upper={};
+ for(const p of people){const id=p.id;preferredTotal[id]=quotas[id]??Math.max(lockedCard[id],goals[id]?.card??0)+Math.max(lockedR[id]+lockedX[id],goals[id]?.dawn??0);upper[id]=Math.min(quotas[id]??n,workCapacity[id],(goals[id]?.card??cardCapacity[id])+(goals[id]?.dawn??earlyCapacity[id]));}
+ for(const p of people)if(!p.allowed.some(code=>['N','M','A'].includes(code)&&canUseSymbol(p,code))&&quotas[p.id]===undefined&&goals[p.id]?.dawn===undefined)upper[p.id]=Math.min(upper[p.id],Math.max(lockedR[p.id]+lockedX[p.id],Math.ceil(totalX/Math.max(1,xIds.length))));
+ const mains=people.filter(p=>main.has(p.id)),academics=people.filter(p=>!main.has(p.id)&&/^นวก\./.test(p.role||''));
+ if(mains.length){const floor=Math.max(0,...academics.map(p=>preferredTotal[p.id])),ceiling=Math.min(...mains.map(p=>upper[p.id]));for(const p of mains)preferredTotal[p.id]=Math.max(preferredTotal[p.id],floor);for(const p of academics)upper[p.id]=Math.min(upper[p.id],ceiling)}
+ const totalSlots=Object.keys(m.days).reduce((sum,d)=>sum+CODES.reduce((a,code)=>a+need(d,code),0),0);
+ const pairLimits=(excl||[]).filter(([a,b])=>upper[a]!==undefined&&upper[b]!==undefined).map(([a,b])=>({a,b,limit:new Set([...CODES.flatMap(code=>available[a][code]),...CODES.flatMap(code=>available[b][code])]).size}));
+ // Plan total workloads before splitting early shifts. In particular, a small
+ // card goal for a main worker may require more early shifts to keep academics below them.
+ let planned=Object.values(preferredTotal).reduce((a,b)=>a+b,0);
+ while(planned<totalSlots){
+  const candidates=people.filter(p=>preferredTotal[p.id]<upper[p.id]&&(!academics.includes(p)||mains.every(other=>preferredTotal[p.id]<preferredTotal[other.id]))&&pairLimits.every(pair=>pair.a!==p.id&&pair.b!==p.id||preferredTotal[pair.a]+preferredTotal[pair.b]<pair.limit));
+  if(!candidates.length)break;
+  candidates.sort((a,b)=>(preferredTotal[a.id]+(main.has(a.id)?-.25:a.id==='8'?0:1.5))-(preferredTotal[b.id]+(main.has(b.id)?-.25:b.id==='8'?0:1.5))||people.indexOf(a)-people.indexOf(b));
+  preferredTotal[candidates[0].id]++;planned++;
+ }
+ const minimumEarly=Object.fromEntries(people.map(p=>[p.id,cardCapacity[p.id]>0?Math.max(0,preferredTotal[p.id]-(goals[p.id]?.card??cardCapacity[p.id])):0]));
+ const academicCeiling=Math.min(...people.filter(p=>main.has(p.id)).map(p=>Math.min(quotas[p.id]??n,new Set(CODES.flatMap(code=>available[p.id][code])).size)));
  const exact={},budget={},rCapacity={},preferredR={...lockedR},preferredX={...lockedX};
  for(const p of people){
   const work=new Set(CODES.flatMap(code=>available[p.id][code])).size,early=new Set([...available[p.id].R,...available[p.id].X]).size,card=goals[p.id]?.card??lockedCard[p.id];
   const onlyEarly=!p.allowed.some(code=>['N','M','A'].includes(code)&&canUseSymbol(p,code));
   exact[p.id]=goals[p.id]?.dawn??(onlyEarly?quotas[p.id]:undefined);
-  budget[p.id]=Math.max(0,Math.min(exact[p.id]??n,(quotas[p.id]??n)-card,work-card,early));
+  const totalCeiling=!main.has(p.id)&&/^นวก\./.test(p.role||'')?Math.min(quotas[p.id]??n,academicCeiling):quotas[p.id]??n;
+  budget[p.id]=Math.max(0,Math.min(exact[p.id]??n,totalCeiling-card,work-card,early,options.relaxedWorkload?n:preferredTotal[p.id]-card));
   rCapacity[p.id]=Math.max(0,Math.min(available[p.id].R.length,budget[p.id]-lockedX[p.id]));
  }
  // Allocate counts jointly: typed goals dominate fair shares and one-red-each preferences.
@@ -96,7 +133,7 @@ function distributionPlan(state,month){
  function edge(from,to,capacity,cost){const forward={to,rev:graph[to].length,capacity,initial:capacity,cost},backward={to:from,rev:graph[from].length,capacity:0,initial:0,cost:-cost};graph[from].push(forward);graph[to].push(backward);return forward}
  for(const p of people){
   const id=p.id;personNodes[id]=node();const remaining=Math.max(0,budget[id]-lockedR[id]-lockedX[id]);
-  edge(personNodes[id],sink,remaining,exact[id]===undefined?0:-goalPriority);
+  for(let i=0;i<remaining;i++)edge(personNodes[id],sink,1,exact[id]!==undefined?-goalPriority:i+lockedR[id]+lockedX[id]<minimumEarly[id]?-goalPriority/2:0);
   for(const code of ['R','X']){
    codeNodes[id+'|'+code]=node();const locked=code==='R'?lockedR[id]:lockedX[id],capacity=Math.max(0,available[id][code].length-locked);
    for(let i=0;i<capacity;i++){
@@ -125,11 +162,44 @@ function distributionPlan(state,month){
  for(const entry of tracked)(entry.code==='R'?preferredR:preferredX)[entry.id]+=entry.edge.initial-entry.edge.capacity;
  let error='';for(const p of people)if(exact[p.id]!==undefined&&preferredR[p.id]+preferredX[p.id]!==exact[p.id]){error=p.name+' ตั้งเป้ารุ่งอรุณ '+exact[p.id]+' เวร แต่วันที่เปิดและข้อจำกัดปัจจุบันรองรับไม่พอ กรุณาปรับเป้าหรือวันเปิดเวร';break}
  if(!error&&flow<requested)error='จำนวนเวรรุ่งอรุณที่เปิดไว้มากกว่าที่เป้ารายคนและวันว่างรองรับ กรุณาเพิ่มเป้ารุ่งอรุณของคนที่ว่าง หรือปรับวันเปิดเวร';
- return{rIds,xIds,totalR,totalX,rMin,rMax,preferredR,preferredX,rCapacity,xRequired:xIds.filter(id=>preferredX[id]>0),mainIds:[...main],error,remainder:rIds.length?totalR%rIds.length:0,weekdays:Array.from({length:n},(_,i)=>i+1).filter(d=>![0,6].includes(weekday(month,d))).length};
+ if(error&&!options.relaxedWorkload)return distributionPlan(state,month,{relaxedWorkload:true});
+ return{rIds,xIds,totalR,totalX,rMin,rMax,preferredR,preferredX,preferredTotal,rCapacity,xRequired:xIds.filter(id=>preferredX[id]>0),mainIds:[...main],error,remainder:rIds.length?totalR%rIds.length:0,weekdays:Array.from({length:n},(_,i)=>i+1).filter(d=>![0,6].includes(weekday(month,d))).length};
 }
 function dawnTargets(state,month){const plan=distributionPlan(state,month);return Object.fromEntries(plan.rIds.map(id=>[id,plan.preferredR[id]]))}
 function boundary(state,month,p,side){let adjacent=state.months[monthOffset(month,side)],n=side<0?daysIn(monthOffset(month,-1)):1;let actual=adjacent&&!(adjacent.excludedStaffIds||[]).includes(p.id)?cell(adjacent,p.id,n).code:'';let configured=state.months[month].boundaries?.[p.id]?.[side<0?'prev':'next'];return adjacent?actual:(configured??p[side<0?'prev':'next']??'')}
 function totals(state,month){let m=state.months[month],included=new Set(monthPeople(state,month).map(p=>p.id));return state.people.map(p=>{let t={id:p.id,total:0,hours:0,OFF:0,VAC:0,N:0,M:0,A:0,R:0,X:0};if(included.has(p.id))for(let d=1;d<=daysIn(month);d++){let c=cell(m,p.id,d);if(CODES.includes(c.code)){t[c.code]++;t.total++;t.hours+=META[c.code].hours}if(c.block)t[c.block]++}return t})}
+function workloadPolicy(state,month){
+ const people=monthPeople(state,month).filter(p=>p.active),main=new Set(state.mainStaffIds||MAIN_STAFF_IDS);
+ return{main:people.filter(p=>main.has(p.id)),academic:people.filter(p=>!main.has(p.id)&&/^นวก\./.test(p.role||''))};
+}
+function repairTotals(state,month,base,plan,targets,goals,excl){
+ const m=clone(state.months[month]);m.days=clone(base.days);
+ const check=clone(state);check.pairExclusions=excl;check.quotas={};check.months[month]=clone(m);check.months[month].quotas={};check.months[month].categoryQuotas={};check.months[month].distributionRules=false;
+ if(!audit(check,month,{distribution:false}).complete)return null;
+ const people=monthPeople(state,month),policy=workloadPolicy(state,month),n=daysIn(month),ts=Object.fromEntries(totals({...state,months:{...state.months,[month]:m}},month).map(t=>[t.id,t]));
+ function penalty(){let score=0;for(const p of people){const t=ts[p.id];if(targets[p.id]!==undefined)score+=(t.total-targets[p.id])**2;const cat=categoryTotals(t);for(const g of SHIFT_GROUPS)if(goals[p.id]?.[g.id]!==undefined)score+=(cat[g.id]-goals[p.id][g.id])**2;}for(const p of policy.academic)for(const main of policy.main)score+=Math.max(0,ts[p.id].total-ts[main.id].total)**2;for(const id of plan.xRequired)if(ts[id].X<1)score++;return score}
+ function change(id,from,to){const t=ts[id];if(from){t[from]--;t.total--}if(to){t[to]++;t.total++}}
+ function swap(a,b,d){const ca=cell(m,a,d),cb=cell(m,b,d);m.cells[key(a,d)]={...ca,code:cb.code};m.cells[key(b,d)]={...cb,code:ca.code};change(a,ca.code,cb.code);change(b,cb.code,ca.code)}
+ function valid(p,d){const code=cell(m,p.id,d).code;if(code&&(!eligibleOnDay(p,month,d,code)||cell(m,p.id,d).block))return false;const prev=d===1?boundary(state,month,p,-1):cell(m,p.id,d-1).code,next=d===n?boundary(state,month,p,1):cell(m,p.id,d+1).code;return!restConflict(prev,code)&&!restConflict(code,next)&&(!code||!people.some(other=>other.id!==p.id&&cell(m,other.id,d).code&&isExcludedPair(p.id,other.id,excl)))}
+ // A one-unit quota edit often needs only one reassignment. Reuse the valid
+ // calendar first, before constructing a new month with the full date search.
+ let current=penalty(),stalled=0,lastMove='',repairStart=Date.now();
+ for(let pass=0;current&&pass<n*people.length&&Date.now()-repairStart<700;pass++){
+  let best=null,bestScore=current,neutral=[],neutralCount=0;
+  for(let d=1;d<=n;d++)for(let a=0;a<people.length;a++)for(let b=a+1;b<people.length;b++){
+   const p=people[a],q=people[b],ca=cell(m,p.id,d),cb=cell(m,q.id,d);if(ca.locked||cb.locked||ca.code===cb.code||ca.block||cb.block)continue;
+   const ka=key(p.id,d),kb=key(q.id,d),oldA=m.cells[ka],oldB=m.cells[kb];swap(p.id,q.id,d);
+   if(valid(p,d)&&valid(q,d)){const score=penalty();if(score<bestScore){bestScore=score;best={a:p.id,b:q.id,d}}else if(score===current&&p.id+'|'+q.id+'|'+d!==lastMove){neutralCount++;if(Math.random()<1/neutralCount)neutral=[{a:p.id,b:q.id,d}]}}
+   swap(p.id,q.id,d);if(oldA===undefined)delete m.cells[ka];else m.cells[ka]=oldA;if(oldB===undefined)delete m.cells[kb];else m.cells[kb]=oldB;
+  }
+  if(!best){if(!neutral.length||++stalled>40)break;best=neutral[0]}else stalled=0;
+  lastMove=best.a+'|'+best.b+'|'+best.d;swap(best.a,best.b,best.d);current=bestScore;
+ }
+ if(current)return null;
+ m.categoryQuotas={...(m.categoryQuotas||{}),...clone(goals)};m.distributionRules=true;
+ const result=clone(state);result.pairExclusions=excl;result.months[month]=m;
+ return audit(result,month).complete?m:null;
+}
 function audit(state,month,options={}){let m=state.months[month],n=daysIn(month),people=monthPeople(state,month),included=new Set(people.map(p=>p.id)),issues=[],ts=totals(state,month);const add=(type,text,p,d)=>issues.push({type,text,p,d});
 for(let d=1;d<=n;d++){for(let code of CODES){let got=people.filter(p=>cell(m,p.id,d).code===code).length,need=m.days[d].need[code];if(got!==need)add('coverage','วันที่ '+d+' · '+META[code].name+' '+got+'/'+need+' คน',null,d)}}
 for(let p of people){for(let d=1;d<=n;d++){let c=cell(m,p.id,d);if(c.block&&!canUseSymbol(p,c.block))add('eligibility',p.name+' วันที่ '+d+' · รับได้เฉพาะ รพ.สต. (ร สีแดง) หรือช่องว่าง',p.id,d);if(c.code&&c.block)add('blocked',p.name+' วันที่ '+d+' · มีเวรชน '+c.block,p.id,d);if(c.code&&!eligibleOnDay(p,month,d,c.code))add('eligibility',p.name+' วันที่ '+d+' · ไม่รับเวรประเภทนี้'+(c.code==='N'?' (ดึก จ.–ศ. เฉพาะสุขสันต์ นุ่มนวล เกศสรา ปฏิภาณ)':''),p.id,d);let prev=d===1?boundary(state,month,p,-1):cell(m,p.id,d-1).code;if(restConflict(prev,c.code))add('rest',p.name+' วันที่ '+d+' · '+restDescription(c.code),p.id,d)}
@@ -144,11 +214,15 @@ const counts=group(state,month).map(id=>{const t=ts.find(t=>t.id===id);return di
 if(distribution){
  const plan=distributionPlan(state,month);
  if(plan.error)add('quota',plan.error);
+ const policy=workloadPolicy(state,month),minimum=Math.min(...policy.main.map(p=>ts.find(t=>t.id===p.id).total));
+ for(const p of policy.academic){const actual=ts.find(t=>t.id===p.id).total;if(actual>minimum)add('distribution',p.name+' · เวรรวม '+actual+' มากกว่าตัวหลักที่ได้น้อยที่สุด ('+minimum+' เวร)',p.id)}
  for(const id of plan.xRequired){const t=ts.find(t=>t.id===id),p=people.find(p=>p.id===id);if(t.X<1)add('distribution',p.name+' · รพ.สต. ให้ตัวหลักก่อนเมื่อเวรไม่พอ (ขาด 1 เวร)',id)}
 }
 return{issues,totals:ts,complete:!issues.length,groupCounts:counts}
 }
 function solve(state,month,opts={}){
+ const calendar=opts.calendar??state.months[month].calendarRules??false;
+ if(calendar){state=clone(state);normalizeCalendarDemand(state,month)}
  const original=state.months[month], n=daysIn(month), people=monthPeople(state,month), included=new Set(people.map(p=>p.id)),distribution=opts.distribution??original.distributionRules??false;
  const excl=opts.pairExclusions!==undefined?opts.pairExclusions:(state.pairExclusions!==undefined?state.pairExclusions:DEFAULT_PAIR_EXCLUSIONS);
  const mainIds=opts.mainStaffIds||state.mainStaffIds||MAIN_STAFF_IDS;
@@ -160,7 +234,12 @@ function solve(state,month,opts={}){
  if(original.autoCapacity)for(let d=1;d<=n;d++)base.days[d].need=clone(original.autoCapacity[d]||base.days[d].need);
  const totalDemand=Object.values(base.days).reduce((s,x)=>s+CODES.reduce((a,c)=>a+x.need[c],0),0);
  if(!people.length&&totalDemand>0)return{ok:false,reason:'capacity',message:'ยังไม่ได้เลือกบุคลากรลงตารางเดือนนี้ กรุณาเลือกที่เมนูบุคลากร'};
- const flexible=allTargets&&requestedTotal<totalDemand;
+ const flexible=!calendar&&allTargets&&requestedTotal<totalDemand;
+ if(calendar){
+  const demand=calendarDemand(state,month),description='เดือนนี้มีวันธรรมดา '+demand.regularDays+' × 2 + วันหยุด '+demand.holidayDays+' × 4 = ห้องบัตร '+demand.card+' เวร และรุ่งอรุณ '+demand.dawn+' เวร (หน้าตู้KIOS '+demand.R+' + รพ.สต. '+demand.X+') รวม '+demand.total+' เวร';
+  for(const g of SHIFT_GROUPS){const requested=people.reduce((sum,p)=>sum+(categoryGoals[p.id]?.[g.id]??0),0),capacity=demand[g.id],everyone=people.every(p=>categoryGoals[p.id]?.[g.id]!==undefined);if(requested>capacity||everyone&&requested!==capacity)return{ok:false,reason:'quota',message:description+'\nยอด'+g.label+'ที่กรอก '+requested+' เวรไม่ตรงกับ '+capacity+' เวรตามปฏิทิน กรุณาปรับยอด หรือล้างตัวเลขของบางคนเพื่อให้ระบบกระจายส่วนที่เหลือ โดยไม่ต้องตั้งจำนวนห้องบัตรทีละวัน'};}
+  if(allTargets&&requestedTotal!==totalDemand)return{ok:false,reason:'quota',message:description+'\nยอดรวมที่กรอก '+requestedTotal+' เวรไม่ตรงกับ '+totalDemand+' เวร กรุณาปรับยอด หรือล้างตัวเลขของบางคนเพื่อให้ระบบคำนวณส่วนที่เหลือ'};
+ }
  if(allTargets&&requestedTotal>totalDemand)return{ok:false,reason:'capacity',message:'จำนวนที่กรอกรวม '+requestedTotal+' เวร มากกว่าช่องเวรที่เปิดรับรายวัน '+totalDemand+' เวร กรุณาเพิ่มจำนวนที่หัววันที่หรือลดจำนวนเวรที่กรอก'};
  for(const g of SHIFT_GROUPS){const requested=people.reduce((sum,p)=>sum+(categoryGoals[p.id]?.[g.id]||0),0),capacity=Object.values(base.days).reduce((sum,day)=>sum+g.codes.reduce((a,c)=>a+day.need[c],0),0);if(requested>capacity)return{ok:false,reason:'capacity',message:g.label+' ตั้งเป้ารวม '+requested+' เวร แต่เปิดรับไว้ '+capacity+' เวร กรุณาปรับเป้าหรือจำนวนเวรที่หัววันที่'}}
  const fixedIssues=[];
@@ -183,17 +262,48 @@ function solve(state,month,opts={}){
   for(const category of SHIFT_GROUPS){const target=categoryGoals[p.id]?.[category.id];if(target===undefined)continue;const maximum=capacityFor(p,category.codes);if(target>maximum)return{ok:false,reason:'quota',message:p.name+' ตั้งเป้า'+category.label+' '+target+' เวร แต่วันที่เปิดเวร วันลา และเวรล็อกรองรับได้สูงสุด '+maximum+' เวร กรุณาปรับเป้าหรือวันเปิดเวร'};}
   if(targets[p.id]!==undefined){const maximum=capacityFor(p,CODES);if(targets[p.id]>maximum)return{ok:false,reason:'quota',message:p.name+' ตั้งเป้ารวม '+targets[p.id]+' เวร แต่ลงได้สูงสุด '+maximum+' วัน กรุณาปรับเป้าหรือวันลา'};}
  }
+ const policy=workloadPolicy(state,month);
+ const maximum=Object.fromEntries(people.map(p=>[p.id,Math.min(targets[p.id]??n,capacityFor(p,CODES),(categoryGoals[p.id]?.card??capacityFor(p,['N','M','A']))+(categoryGoals[p.id]?.dawn??capacityFor(p,['R','X'])))]));
+ const minimum=Object.fromEntries(people.map(p=>[p.id,targets[p.id]??Math.max(counts[p.id],(categoryGoals[p.id]?.card??baseCategories[p.id].card)+(categoryGoals[p.id]?.dawn??baseCategories[p.id].dawn))]));
+ if(distribution&&policy.main.length){
+  const ceiling=Math.min(...policy.main.map(p=>maximum[p.id]));
+  for(const p of policy.academic){if(minimum[p.id]>ceiling)return{ok:false,reason:'quota',message:p.name+' ต้องมีเวรรวมอย่างน้อย '+minimum[p.id]+' เวร แต่ตัวหลักที่ได้น้อยที่สุดรับได้ '+ceiling+' เวร จึงขัดกับกติกา นวก. ไม่เกินตัวหลักทุกคน กรุณาปรับเป้าหรือวันลา'};maximum[p.id]=Math.min(maximum[p.id],ceiling)}
+  const academicMinimum=Math.max(0,...policy.academic.map(p=>minimum[p.id]));
+  for(const p of policy.main)minimum[p.id]=Math.max(minimum[p.id],academicMinimum);
+  if(Object.values(minimum).reduce((a,b)=>a+b,0)>totalDemand)return{ok:false,reason:'quota',message:'ยอดที่กรอกต้องใช้เวรรวมอย่างน้อย '+Object.values(minimum).reduce((a,b)=>a+b,0)+' เวร เพื่อให้ นวก. ไม่เกินตัวหลักทุกคน แต่เปิดไว้ '+totalDemand+' เวร กรุณาลดยอดที่กรอกหรือเพิ่มวันเปิดเวร'};
+ }
+ for(const [a,b]of excl||[]){if(!included.has(a)||!included.has(b))continue;const together=Array.from({length:n},(_,i)=>i+1).filter(d=>people.filter(p=>p.id===a||p.id===b).some(p=>{const c=cell(base,p.id,d);return c.code||!c.block&&CODES.some(code=>base.days[d].need[code]&&eligibleOnDay(p,month,d,code))})).length;if(minimum[a]+minimum[b]>together)return{ok:false,reason:'quota',message:people.find(p=>p.id===a).name+' และ '+people.find(p=>p.id===b).name+' ห้ามขึ้นเวรวันเดียวกัน เป้ารวมของทั้งคู่ต้องใช้อย่างน้อย '+(minimum[a]+minimum[b])+' วัน แต่มีวันรองรับร่วมกัน '+together+' วัน กรุณาลดเป้าหรือปรับวันลา'};}
  const plan=distributionPlan({...state,months:{...state.months,[month]:base}},month);
 
  const blueIds=new Set(plan.rIds),redIds=new Set(plan.xRequired),mainSet=new Set(mainIds),baseBlue=Object.fromEntries(people.map(p=>[p.id,Array.from({length:n},(_,i)=>cell(base,p.id,i+1).code).filter(code=>code==='R').length])),baseRed=Object.fromEntries(people.map(p=>[p.id,Array.from({length:n},(_,i)=>cell(base,p.id,i+1).code).filter(code=>code==='X').length]));
  for(let d=1;d<=n;d++){let required=demand.filter(s=>s.d===d).length;let available=people.filter(p=>!cell(base,p.id,d).block&&!cell(base,p.id,d).code&&p.allowed.some(c=>eligibleOnDay(p,month,d,c)&&base.days[d].need[c]>0)).length;if(!flexible&&required>available)return{ok:false,reason:'capacity',message:'วันที่ '+d+' ต้องเพิ่มอีก '+required+' คน แต่มีคนว่าง '+available+' คน (OFF / VAC / เวรล็อกในวันนี้ / สิทธิ์รับเวร) กรุณาปรับวันหยุดหรือกำลังคน'};}
  for(let slot of demand){let poss=people.filter(p=>eligibleOnDay(p,month,slot.d,slot.code)&&!cell(base,p.id,slot.d).block&&!cell(base,p.id,slot.d).code);if(!flexible&&!poss.length)return{ok:false,message:'วันที่ '+slot.d+' เวร '+META[slot.code].name+' ไม่มีคนที่ว่างและรับเวรนี้ได้',reason:'capacity'}}
+ if(!flexible&&distribution){
+  // A relaxed matching proves aggregate shortages before the date search. Each
+  // person/day has capacity one; person totals and disjoint excluded pairs are capped.
+  const graph=[],node=()=>{graph.push([]);return graph.length-1},source=node(),sink=node(),personNodes={},dayNodes={},pairNodes={},usedPairs=new Set();
+  const edge=(a,b,cap)=>{graph[a].push({to:b,rev:graph[b].length,cap});graph[b].push({to:a,rev:graph[a].length-1,cap:0})};
+  for(const [a,b]of excl||[]){if(!included.has(a)||!included.has(b)||usedPairs.has(a)||usedPairs.has(b))continue;usedPairs.add(a);usedPairs.add(b);const joint=node();pairNodes[a]=joint;pairNodes[b]=joint;edge(joint,sink,Math.max(0,n-counts[a]-counts[b]));}
+  for(const p of people){personNodes[p.id]=node();edge(personNodes[p.id],pairNodes[p.id]??sink,Math.max(0,maximum[p.id]-counts[p.id]));}
+  for(const slot of demand){const slotNode=node();edge(source,slotNode,1);for(const p of people){const current=cell(base,p.id,slot.d),category=SHIFT_GROUP_BY_CODE[slot.code],prev=slot.d===1?boundary(state,month,p,-1):cell(base,p.id,slot.d-1).code,next=slot.d===n?boundary(state,month,p,1):cell(base,p.id,slot.d+1).code;if(current.code||current.block||!eligibleOnDay(p,month,slot.d,slot.code)||restConflict(prev,slot.code)||restConflict(slot.code,next)||(categoryGoals[p.id]?.[category]??n)<=baseCategories[p.id][category]||people.some(other=>other.id!==p.id&&cell(base,other.id,slot.d).code&&isExcludedPair(p.id,other.id,excl)))continue;const k=key(p.id,slot.d);if(dayNodes[k]===undefined){dayNodes[k]=node();edge(dayNodes[k],personNodes[p.id],1)}edge(slotNode,dayNodes[k],1)}}
+  let covered=0;while(true){const previous=Array(graph.length).fill(null),queue=[source];previous[source]=[-1,-1];for(let h=0;h<queue.length&&previous[sink]===null;h++)for(let i=0;i<graph[queue[h]].length;i++){const e=graph[queue[h]][i];if(e.cap>0&&previous[e.to]===null){previous[e.to]=[queue[h],i];queue.push(e.to)}}if(previous[sink]===null)break;for(let at=sink;at!==source;){const [from,i]=previous[at],e=graph[from][i];e.cap--;graph[at][e.rev].cap++;at=from}covered++;}
+  if(covered<demand.length)return{ok:false,reason:'quota',message:'เป้ารวม สิทธิ์รับเวร วันลา และกติกา นวก. ไม่เกินตัวหลักทุกคน รองรับได้สูงสุด '+(covered+Object.values(counts).reduce((a,b)=>a+b,0))+' จาก '+totalDemand+' เวร ขาดอย่างน้อย '+(demand.length-covered)+' เวร กรุณาปรับยอดรวมของตัวหลักหรือจำนวนเวรที่เปิด'};
+ }
  if(distribution&&plan.error)return{ok:false,reason:'quota',message:plan.error};
- const preferredR=plan.preferredR,baseR=baseBlue;
+ if(distribution){
+  for(const id of plan.xRequired)minimum[id]=Math.max(minimum[id],(categoryGoals[id]?.card??baseCategories[id].card)+Math.max(categoryGoals[id]?.dawn??baseCategories[id].dawn,1));
+  if(policy.main.length){const floor=Math.max(0,...policy.academic.map(p=>minimum[p.id]));for(const p of policy.main)minimum[p.id]=Math.max(minimum[p.id],floor)}
+  const required=Object.values(minimum).reduce((a,b)=>a+b,0);
+  if(required>totalDemand)return{ok:false,reason:'quota',message:'ยอดที่กรอก รวมกติกา นวก. ไม่เกินตัวหลักทุกคน และ รพ.สต. อย่างน้อยคนละ 1 ต้องใช้อย่างน้อย '+required+' เวร แต่เปิดไว้ '+totalDemand+' เวร กรุณาลดยอดที่กรอกหรือเพิ่มวันเปิดเวร'};
+ }
+ if(distribution&&!flexible&&(Object.keys(targets).length||Object.keys(categoryGoals).length)){const repaired=repairTotals(state,month,base,plan,targets,categoryGoals,excl);if(repaired)return{ok:true,month:repaired,nodes:0,reallocated:true};}
+ const preferredR=plan.preferredR,baseR=baseBlue,chronological=Object.keys(categoryGoals).length<3;
  let nodes=0,timedOut=false;const start=Date.now(),limit=opts.ms||5000, nodeLimit=opts.nodes||180000;
  for(const strictR of [true,false]){timedOut=false;
   let m=clone(base),cnt={...counts},remaining=demand.map((s,i)=>({...s,i}));
-  const rCnt={...baseR},xCnt={...baseRed},catCnt=clone(baseCategories),exact={...targets};
+  const rCnt={...baseR},xCnt={...baseRed},catCnt=clone(baseCategories),exact={...targets},codeCnt=Object.fromEntries(people.map(p=>[p.id,Object.fromEntries(CODES.map(code=>[code,0]))]));
+  for(const p of people)for(let d=1;d<=n;d++){const code=cell(base,p.id,d).code;if(code)codeCnt[p.id][code]++}
+  const partners=Object.fromEntries(people.map(p=>[p.id,people.filter(other=>other.id!==p.id&&isExcludedPair(p.id,other.id,excl)).map(other=>other.id)]));
   if(Object.entries(exact).reduce((sum,[id,t])=>sum+t-counts[id],0)>remaining.length)continue;
   if(!flexible&&people.every(p=>exact[p.id]!==undefined)&&Object.values(exact).reduce((a,b)=>a+b,0)!==totalDemand)continue;
   if(strictR&&people.some(p=>baseR[p.id]>(preferredR[p.id]||0)||(exact[p.id]!==undefined&&exact[p.id]<(preferredR[p.id]||0))))continue;
@@ -203,21 +313,46 @@ function solve(state,month,opts={}){
    if(!eligibleOnDay(p,month,s.d,s.code)||c.block||c.code)return false;
    const category=SHIFT_GROUP_BY_CODE[s.code];if(categoryGoals[p.id]?.[category]!==undefined&&catCnt[p.id][category]>=categoryGoals[p.id][category])return false;
    if(targets[p.id]!==undefined&&cnt[p.id]>=targets[p.id])return false;
+   if(distribution&&cnt[p.id]>=maximum[p.id])return false;
    if(strictR&&s.code==='R'&&rCnt[p.id]>=(preferredR[p.id]||0))return false;
    if(distribution&&strictR&&s.code==='X'&&xCnt[p.id]>=(plan.preferredX[p.id]||0))return false;
-   if(excl&&excl.length){for(let other of people){if(other.id!==p.id&&cell(m,other.id,s.d).code){if(isExcludedPair(p.id,other.id,excl))return false}}}
+   if(partners[p.id].some(id=>cell(m,id,s.d).code))return false;
    let prev=s.d===1?boundary(state,month,p,-1):cell(m,p.id,s.d-1).code,next=s.d===n?boundary(state,month,p,1):cell(m,p.id,s.d+1).code;
    return !restConflict(prev,s.code)&&!restConflict(s.code,next)
   }
+  function quotaFlow(left,category){
+   const slots=category?left.filter(s=>SHIFT_GROUP_BY_CODE[s.code]===category):left;
+   const required=people.map(p=>({p,gap:Math.max(0,category?(categoryGoals[p.id]?.[category]??0)-catCnt[p.id][category]:(distribution?minimum[p.id]:targets[p.id]??0)-cnt[p.id])})).filter(x=>x.gap>0),total=required.reduce((sum,x)=>sum+x.gap,0);
+   if(!total)return true;if(total>slots.length)return false;
+   const graph=[],node=()=>{graph.push([]);return graph.length-1},source=node(),sink=node(),slotNodes=slots.map(()=>node());
+   const edge=(a,b,cap)=>{graph[a].push({to:b,rev:graph[b].length,cap});graph[b].push({to:a,rev:graph[a].length-1,cap:0})};
+   slotNodes.forEach(v=>edge(v,sink,1));
+   for(const {p,gap}of required){const person=node(),dates={};edge(source,person,gap);for(let i=0;i<slots.length;i++)if(eligible(p,slots[i])){const d=slots[i].d;if(dates[d]===undefined){dates[d]=node();edge(person,dates[d],1)}edge(dates[d],slotNodes[i],1)}}
+   let flow=0;
+   while(flow<total){
+    const level=Array(graph.length).fill(-1),queue=[source];level[source]=0;for(let h=0;h<queue.length;h++)for(const e of graph[queue[h]])if(e.cap>0&&level[e.to]<0){level[e.to]=level[queue[h]]+1;queue.push(e.to)}
+    if(level[sink]<0)return false;
+    const next=Array(graph.length).fill(0);function send(v,amount){if(v===sink)return amount;for(;next[v]<graph[v].length;next[v]++){const e=graph[v][next[v]];if(e.cap>0&&level[e.to]===level[v]+1){const sent=send(e.to,Math.min(amount,e.cap));if(sent){e.cap-=sent;graph[e.to][e.rev].cap+=sent;return sent}}}return 0}
+    let sent;while((sent=send(source,total-flow)))flow+=sent;
+   }
+   return true;
+  }
+  const failedDays=new Set(),dailyDemand=Object.fromEntries(Array.from({length:n},(_,i)=>[i+1,demand.filter(s=>s.d===i+1).length]));
   function dfs(left){
+   const day=left[0]?.d,memo=distribution&&chronological&&day&&left.filter(s=>s.d===day).length===dailyDemand[day]?day+'|'+people.map(p=>cnt[p.id]+','+rCnt[p.id]+','+xCnt[p.id]+','+(cell(m,p.id,day-1).code==='A'?1:0)).join('|'):null;
+   if(memo&&failedDays.has(memo))return false;
+   const result=search(left);if(memo&&!result&&!timedOut)failedDays.add(memo);return result;
+  }
+  function search(left){
    if(++nodes>(strictR?nodeLimit*.35:nodeLimit)||Date.now()-start>(strictR?limit*.35:limit)){timedOut=true;return false}
    const categoriesComplete=()=>people.every(p=>SHIFT_GROUPS.every(g=>categoryGoals[p.id]?.[g.id]===undefined||catCnt[p.id][g.id]===categoryGoals[p.id][g.id]));
    const distributionComplete=()=>!distribution||(plan.xRequired.every(id=>xCnt[id]>=1)&&Object.values(rCnt).reduce((a,b)=>a+b,0)===plan.totalR&&Object.values(xCnt).reduce((a,b)=>a+b,0)===plan.totalX);
-   if(flexible&&people.every(p=>cnt[p.id]===targets[p.id]))return categoriesComplete()&&distributionComplete()&&(!strictR||people.every(p=>rCnt[p.id]===(preferredR[p.id]||0)));
+   const workloadComplete=()=>!distribution||policy.academic.every(p=>policy.main.every(main=>cnt[p.id]<=cnt[main.id]));
+   if(flexible&&people.every(p=>cnt[p.id]===targets[p.id]))return categoriesComplete()&&distributionComplete()&&workloadComplete()&&(!strictR||people.every(p=>rCnt[p.id]===(preferredR[p.id]||0)));
    if(flexible&&Object.entries(exact).reduce((sum,[id,t])=>sum+t-cnt[id],0)>left.length)return false;
    if(!left.length){
     for(let[pid,tgt]of Object.entries(targets)){if(cnt[pid]!==tgt)return false}
-    return categoriesComplete()&&distributionComplete();
+    return categoriesComplete()&&distributionComplete()&&workloadComplete();
    }
    if(distribution)for(const p of people){
     const rGap=strictR&&blueIds.has(p.id)?Math.max(0,(preferredR[p.id]||0)-rCnt[p.id]):0,xGap=strictR?Math.max(0,(plan.preferredX[p.id]||0)-xCnt[p.id]):redIds.has(p.id)?Math.max(0,1-xCnt[p.id]):0;
@@ -225,23 +360,33 @@ function solve(state,month,opts={}){
     if((rGap&&rGap>new Set(left.filter(s=>s.code==='R'&&eligible(p,s)).map(s=>s.d)).size)||(xGap&&xGap>new Set(left.filter(s=>s.code==='X'&&eligible(p,s)).map(s=>s.d)).size))return false;
    }
    for(let[pid,tgt]of Object.entries(targets)){let p=people.find(x=>x.id===pid),gap=tgt-cnt[pid];if(gap<0||gap>new Set(left.filter(s=>eligible(p,s)).map(s=>s.d)).size)return false}
+   if(distribution&&policy.main.length){const required=Math.max(0,...policy.academic.map(p=>Math.max(cnt[p.id],minimum[p.id])));for(const p of policy.main){const gap=Math.max(required,minimum[p.id])-cnt[p.id];if(gap>0&&gap>new Set(left.filter(s=>eligible(p,s)).map(s=>s.d)).size)return false}}
+   if(distribution&&people.reduce((sum,p)=>sum+Math.max(0,minimum[p.id]-cnt[p.id]),0)>left.length)return false;
    for(const p of people)for(const category of SHIFT_GROUPS){const target=categoryGoals[p.id]?.[category.id];if(target===undefined)continue;const gap=target-catCnt[p.id][category.id];if(gap<0||gap>new Set(left.filter(s=>SHIFT_GROUP_BY_CODE[s.code]===category.id&&eligible(p,s)).map(s=>s.d)).size)return false}
+   const firstDay=left[0]?.d;
+   if((Object.keys(targets).length>=3||Object.keys(categoryGoals).length>=3)&&firstDay&&(chronological?left.filter(s=>s.d===firstDay).length===dailyDemand[firstDay]:left.length%8===0)&&(!quotaFlow(left)||!quotaFlow(left,'card')||!quotaFlow(left,'dawn')))return false;
    let pick=0,candidates=null;
    for(let i=0;i<left.length;i++){
     const list=people.filter(p=>eligible(p,left[i]));
     if(!list.length){if(flexible&&(!distribution||!['R','X'].includes(left[i].code)))continue;return false}
     const load=d=>people.filter(p=>cell(m,p.id,d).code).length;
-    const priority=slot=>distribution?({X:0,R:100,N:200,M:200,A:200}[slot.code]):((SHIFT_GROUP_BY_CODE[slot.code]==='dawn'?0:100)+load(slot.d)*10);
+    const priority=slot=>distribution?(chronological?slot.d:({X:0,R:100,N:200,M:200,A:200}[slot.code])):((SHIFT_GROUP_BY_CODE[slot.code]==='dawn'?0:100)+load(slot.d)*10);
     if(candidates===null||((flexible||distribution)?priority(left[i])<priority(left[pick])||(priority(left[i])===priority(left[pick])&&list.length<candidates.length):list.length<candidates.length)){pick=i;candidates=list;if(!flexible&&!distribution&&list.length===1)break}
    }
    if(candidates===null)return false;
    let s=left[pick],rest=left.filter((_,i)=>i!==pick);
    let isR=s.code==='R',isX=s.code==='X';
    let scores=new Map(candidates.map(p=>{
-    let same=Object.entries(m.cells).filter(([k,c])=>k.startsWith(p.id+'|')&&c.code===s.code).length;
+    let same=codeCnt[p.id][s.code];
     const category=SHIFT_GROUP_BY_CODE[s.code],pTarget=categoryGoals[p.id]?.[category]??targets[p.id],categoryTarget=categoryGoals[p.id]?.[category]!==undefined;
     let deficit=pTarget!==undefined?(pTarget-(categoryTarget?catCnt[p.id][category]:cnt[p.id]))/Math.max(1,pTarget):0;
     let score=(category==='card'?catCnt[p.id].card:cnt[p.id])-.7*deficit+.15*same+Math.random()*.65;
+    if(distribution&&category==='card'){
+     // Extra card shifts go to the main group, then Rapeephan, before academics.
+     const preferred=plan.preferredTotal[p.id]??0;
+     score=(preferred?100*cnt[p.id]/preferred:1000+cnt[p.id])+(mainSet.has(p.id)?-1:p.id==='8'?0:1.5)+.15*same-4*deficit+Math.random()*.2;
+     if(mainSet.has(p.id)&&cnt[p.id]<Math.max(0,...policy.academic.map(other=>Math.max(cnt[other.id],minimum[other.id]))))score-=1000;
+    }
     if(isR){
      score=100*(rCnt[p.id]-(preferredR[p.id]||0))+score;
      if(distribution&&!strictR&&plan.totalR<plan.rIds.length&&mainSet.has(p.id))score-=500;
@@ -250,9 +395,9 @@ function solve(state,month,opts={}){
     return[p.id,score];
    }));
    candidates.sort((a,b)=>scores.get(a.id)-scores.get(b.id));
-   for(let p of candidates){let k=key(p.id,s.d),old=m.cells[k];m.cells[k]={code:s.code,block:'',locked:false};cnt[p.id]++;catCnt[p.id][SHIFT_GROUP_BY_CODE[s.code]]++;if(isR)rCnt[p.id]++;if(isX)xCnt[p.id]++;
+   for(let p of candidates){let k=key(p.id,s.d),old=m.cells[k];m.cells[k]={code:s.code,block:'',locked:false};cnt[p.id]++;codeCnt[p.id][s.code]++;catCnt[p.id][SHIFT_GROUP_BY_CODE[s.code]]++;if(isR)rCnt[p.id]++;if(isX)xCnt[p.id]++;
     if(dfs(rest))return true;
-    cnt[p.id]--;catCnt[p.id][SHIFT_GROUP_BY_CODE[s.code]]--;if(isR)rCnt[p.id]--;if(isX)xCnt[p.id]--;if(old)m.cells[k]=old;else delete m.cells[k];if(timedOut)return false
+    cnt[p.id]--;codeCnt[p.id][s.code]--;catCnt[p.id][SHIFT_GROUP_BY_CODE[s.code]]--;if(isR)rCnt[p.id]--;if(isX)xCnt[p.id]--;if(old)m.cells[k]=old;else delete m.cells[k];if(timedOut)return false
    }return flexible&&!timedOut&&(!distribution||!['R','X'].includes(s.code))?dfs(rest):false;
   }
   if(dfs(remaining)){
@@ -290,6 +435,7 @@ function manualRange(state,month,id,start,end,value){
   if(restConflict(prev,cell(m,id,d).code))return{ok:false,message:'วันที่ '+d+' '+restDescription(cell(m,id,d).code)+' · ยังไม่ได้แก้ไขทุกช่องที่เลือก'};
  }
  if(hi===n&&restConflict(cell(m,id,n).code,boundary(state,month,p,1)))return{ok:false,message:restDescription(boundary(state,month,p,1))+'ข้ามเดือน · ยังไม่ได้แก้ไขทุกช่องที่เลือก'};
+ if(m.calendarRules&&['R','X'].includes(code))for(let d=lo;d<=hi;d++)m.days[d].need[code]=Math.max(m.days[d].need[code],monthPeople(state,month).filter(person=>cell(m,person.id,d).code===code).length);
  return{ok:true,month:m,changed};
 }
-if(typeof module!=='undefined')module.exports={CODES,META,DEFAULT_PAY_RATES,DEFAULT_PAIR_EXCLUSIONS,MAIN_STAFF_IDS,WEEKDAY_NIGHT_IDS,SHIFT_GROUPS,PAY_GROUPS,clone,key,isExcludedPair,daysIn,weekday,monthOffset,freshMonth,cell,manualPeople,monthPeople,group,canUseSymbol,eligibleOnDay,restConflict,restDescription,categoryTotals,categoryTargets,quotaTargets,defaultDawnRate,payRate,normalizePayRates,totalPay,distributionPlan,dawnTargets,boundary,totals,audit,solve,manualRange};
+if(typeof module!=='undefined')module.exports={CODES,META,DEFAULT_PAY_RATES,DEFAULT_PAIR_EXCLUSIONS,MAIN_STAFF_IDS,WEEKDAY_NIGHT_IDS,SHIFT_GROUPS,PAY_GROUPS,clone,key,isExcludedPair,daysIn,weekday,monthOffset,freshMonth,calendarDemand,normalizeCalendarDemand,cell,manualPeople,monthPeople,group,canUseSymbol,eligibleOnDay,restConflict,restDescription,categoryTotals,categoryTargets,quotaTargets,defaultDawnRate,payRate,normalizePayRates,totalPay,distributionPlan,dawnTargets,boundary,totals,audit,solve,manualRange};
