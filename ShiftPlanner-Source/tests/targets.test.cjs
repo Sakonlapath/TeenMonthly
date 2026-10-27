@@ -4,6 +4,8 @@ for(let d=1;d<=30;d++)s.months[s.selected].days[d].need={N:0,M:0,A:0,R:d<=22?1:0
 assert.deepEqual(Object.values(c.dawnTargets(s,s.selected)),[3,3,3,3,3,3,2,2]);
 let r=c.solve(s,s.selected);assert(r.ok,r.message);s.months[s.selected]=r.month;
 assert.deepEqual(c.totals(s,s.selected).map(t=>t.R),[3,3,3,3,3,3,2,2]);
+// Exercise legacy total-only targets separately from the new category targets.
+delete s.months[s.selected].categoryQuotas;
 assert.deepEqual(c.quotaTargets(s,s.selected,{'3':4}),{'2':4,'3':4,'4':4});
 for(const bad of [{'1':-1},{'2':1.5},{'1':31},{'2':3,'3':4}])assert.throws(()=>c.quotaTargets(s,s.selected,bad));
 let custom=c.clone(s);custom.months[s.selected].quotas={'1':0,'2':4,'3':4,'4':4,'5':4,'6':2,'7':2,'8':2};

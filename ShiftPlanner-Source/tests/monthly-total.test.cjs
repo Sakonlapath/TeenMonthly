@@ -10,7 +10,7 @@ assert.deepEqual(c.totals(s,month).map(t=>t.total),[9,15,15,15,5,5,6,8]);assert(
 assert.equal(Object.values(r.month.days).reduce((a,d)=>a+Object.values(d.need).reduce((a,b)=>a+b,0),0),78);
 for(const[k,cell]of Object.entries(m.cells))assert.equal(r.month.cells[k].block,cell.block);
 // A later increased target uses the original open slots, not the reduced result.
-s.months[month].quotas['1']=10;r=c.solve(s,month,{ms:10000});assert(r.ok,r.message);s.months[month]=r.month;assert.equal(c.totals(s,month).reduce((a,t)=>a+t.total,0),79);assert(c.audit(s,month).complete);
+delete s.months[month].categoryQuotas;s.months[month].quotas['1']=10;r=c.solve(s,month,{ms:10000});assert(r.ok,r.message);s.months[month]=r.month;assert.equal(c.totals(s,month).reduce((a,t)=>a+t.total,0),79);assert(c.audit(s,month).complete);
 // Zero is a deliberate target, not auto. An impossible target never mutates data.
-s.months[month].quotas=Object.fromEntries(s.people.map(p=>[p.id,0]));r=c.solve(s,month);assert(r.ok,r.message);s.months[month]=r.month;assert.equal(c.totals(s,month).reduce((a,t)=>a+t.total,0),0);
+delete s.months[month].categoryQuotas;s.months[month].quotas=Object.fromEntries(s.people.map(p=>[p.id,0]));r=c.solve(s,month);assert(r.ok,r.message);s.months[month]=r.month;assert.equal(c.totals(s,month).reduce((a,t)=>a+t.total,0),0);
 console.log('PASS: screenshot scenario 78 total, daily totals match, OFF/VAC preserved, repeat increase to 79 and zero targets');

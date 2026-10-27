@@ -3,7 +3,9 @@ body,button,input,select,textarea{font-family:'Google Sans','Noto Sans Thai','Le
 .quota-warning{display:block;color:#a32644;font-weight:600;font-size:16px}
 .total-editor{display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap}
 .total-editor .quota-input{width:60px;padding:6px 3px;font-size:16px}
-.schedule .sum,.schedule .total-head{min-width:112px;width:112px}
+.schedule{--total-width:112px;--totals-width:calc(3 * var(--total-width))}
+.schedule .sum,.schedule .total-head{min-width:var(--total-width);width:var(--total-width);max-width:var(--total-width)}
+.schedule .total-head{font-size:13px;line-height:1.4;padding:6px;overflow-wrap:anywhere}
 .total-hint{display:block;font-size:16px;font-weight:400;color:var(--muted)}
 @media print{.total-editor{gap:2px}.total-editor .quota-input{width:28px;padding:0;border:0;font-size:9px;appearance:textfield}.schedule .sum,.schedule .total-head{min-width:0;width:55px}.total-hint{font-size:7px}}
 @media screen {
@@ -42,17 +44,22 @@ body,button,input,select,textarea{font-family:'Google Sans','Noto Sans Thai','Le
  .sum{background:#f0e8ff;color:#7041b7}.coverage td{background:#f7f3fc;color:#6c5a7e}.coverage .gap{background:#fff1dd;color:#9a602e}.under-table{background:#fff;font-size:16px;padding:12px 20px}
  /* Keep daily coverage and per-person targets visible inside the scrolling table. */
  .schedule .sum,.schedule .total-head,.schedule tfoot .coverage>:last-child{position:sticky;right:0;box-shadow:-4px 0 8px #30264e0c}
+ .schedule .total-card{right:calc(2 * var(--total-width))}
+ .schedule .total-dawn{right:var(--total-width)}
  .schedule tbody .sum{z-index:2}
  .schedule .total-head{z-index:5}
  .schedule tfoot .coverage>*{position:sticky;bottom:0;z-index:3;box-shadow:0 -3px 8px #30264e0c}
  .schedule tfoot .coverage>.person{z-index:5;background:#f2ebfa}
  .schedule tfoot .coverage>:last-child{z-index:6;background:#f0e8ff;box-shadow:-4px -3px 8px #30264e0c}
- .cell-btn{scroll-margin:62px 120px 54px 328px}
+ .cell-btn{scroll-margin:62px calc(var(--totals-width) + 8px) 54px 328px}
  .bottom .panel:first-child{background:#f1ebff}.bottom .panel:last-child{background:#eaf8f2}.info h3{color:#59416f}.info p{color:#74647f}.toast{background:#5d368f;border:1px solid #b899e2;box-shadow:0 8px 30px #50247735}
  .shortcut-list p{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line);margin:0}.shortcut-list kbd{font-size:16px;background:#f1e7ff}
  @media(max-width:1250px){.shell{grid-template-columns:154px minmax(0,1fr)}main{padding:20px 18px}.paint-tool{padding:7px;gap:5px}.paint-palette{align-items:flex-start}.paint-intro{display:none}.brand{font-size:18px}}
  @media(max-width:760px){.shell{display:block}.sidebar{padding:12px 16px}.nav button{font-size:16px}.top{gap:12px}.top h1{font-size:26px}main{padding:18px 12px}.cards{gap:8px}.card{padding:10px 13px}.card strong{font-size:23px}.paint-bar{padding:12px}.paint-tools{gap:6px}.paint-tool{padding:6px;min-height:44px}.paint-tool kbd{display:none}.paint-feedback{font-size:16px}.paint-feedback>span:last-child{display:none}.paint-heading{gap:6px}.paint-heading>div{gap:6px}.person{min-width:220px;width:220px;padding:8px}.cell-btn{scroll-margin-left:228px}.name{font-size:16px}.paint-palette{gap:8px}.inspect-tool{min-height:40px}.panel-head{padding:14px}.save{display:none}}
  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+ @media(max-width:760px){.schedule{--total-width:80px}.schedule .person{min-width:136px;width:136px;padding:8px}.schedule .role{white-space:normal}.schedule .name{font-size:13px}.schedule .total-editor{gap:2px;font-size:13px}.schedule .quota-input{width:42px;font-size:13px;padding:5px 2px}.schedule .total-hint,.schedule .quota-warning{font-size:11px}.schedule .total-head{font-size:12px;padding:4px}.cell-btn{scroll-margin-left:144px}}
+ @media(max-width:480px){.schedule{--total-width:72px}.schedule .person{min-width:112px;width:112px;padding:6px}.schedule .quota-input{width:36px}.cell-btn{scroll-margin-left:120px}}
+ @media(max-width:360px){.schedule{--total-width:64px}.schedule .person{min-width:96px;width:96px}.schedule .quota-input{width:30px}.schedule .total-head{font-size:11px}.cell-btn{scroll-margin-left:104px}}
 }
 @media print{.paint-bar{display:none!important}.cell-btn.paint-preview{box-shadow:none!important}.cell-btn[data-preview]:after{display:none!important}.cell-btn[data-preview] .chip{visibility:visible!important}}
 @media screen{
