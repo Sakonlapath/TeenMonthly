@@ -65,8 +65,8 @@ for(const standalone of [false,true]){
  const kept=boot(edited,standalone);
  assert.deepEqual(JSON.parse(kept.run('JSON.stringify(state.months["2026-10"])')),edited.months['2026-10']);
  const fresh=boot(null,standalone);assert.equal(fresh.run('Object.keys(activeMonth().cells).length'),0);
- assert.equal((fresh.element('scheduleTable').innerHTML.match(/data-quota-category=/g)||[]).length,18);
- assert.equal((fresh.element('summaryTable').innerHTML.match(/data-quota-category=/g)||[]).length,18);
+ assert.equal((fresh.element('scheduleTable').innerHTML.match(/data-quota-category=/g)||[]).length,27);
+ assert.equal((fresh.element('summaryTable').innerHTML.match(/data-quota-category=/g)||[]).length,27);
  assert.equal(fresh.run('state.people[8].role'),'นวก.คอมพิวเตอร์ชำนาญการ');assert.equal(fresh.run('payRate(state,"9")'),0);
  for(const kind of ['card','dawn'])assert(fresh.element('scheduleTable').innerHTML.includes('total-head total-'+kind));
  fresh.run('onQuotaChange("1","2","card");onQuotaChange("1","4","dawn")');
@@ -83,14 +83,14 @@ for(const standalone of [false,true]){
  fresh.run('activeMonth().cells["1|1"]={code:"M",block:"",locked:false};activeMonth().cells["1|2"]={code:"R",block:"",locked:false};activeMonth().cells["1|3"]={code:"X",block:"",locked:false};render()');
  for(const table of ['scheduleTable','summaryTable']){
   const html=fresh.element(table).innerHTML,editors=[...html.matchAll(/<div class="total-editor">(.*?)<\/div>/g)];
-  assert.equal(editors.length,18);
+  assert.equal(editors.length,27);
   for(const [,editor]of editors){assert(editor.startsWith('<input type="number"'));assert(!editor.includes('<b>'));assert(!editor.includes('<span>/</span>'));assert(!editor.includes('placeholder='))}
   assert.equal((html.match(/class="quota-input group-quota-input"/g)||[]).length,0);
   assert(!html.includes('class="equal"'));
   assert.equal((html.match(/data-person-total=/g)||[]).length,9);
-  assert(html.includes('data-person-total="1" aria-label="รวมเวร '+fresh.run('state.people[0].name')+'">6</output>'));
+  assert(html.includes('data-quota-id="1" data-quota-category="total" value="6" data-person-total="1"'));
   assert(!html.includes('data-quota-category="outreach"'));
-  assert(!html.includes('จัดแล้ว / เป้า'));assert(!html.includes('quota-warning'));assert(!html.includes('เป้ารวม'));
+  assert(!html.includes('จัดแล้ว / เป้า'));assert(!html.includes('quota-warning'));
  }
  assert.equal(fresh.run('targetSum(state,state.selected)'),6);
  fresh.run('onQuotaInput({value:"5"},"1","dawn")');assert.equal(fresh.element('quotaTotal').textContent,7);
@@ -103,14 +103,14 @@ for(const standalone of [false,true]){
  assert.equal(fresh.run('JSON.stringify(group(state).map(id=>activeMonth().categoryQuotas[id]))'),'[{"card":1,"dawn":1},{"card":2,"dawn":1},null]');
  // Both categories are independent, and only the edited person's totals change.
  const inputs=['schedule','summary'].flatMap(()=>['1','2','3','4','5'].flatMap(id=>['card','dawn'].map(category=>({dataset:{quotaId:id,quotaCategory:category},value:'original'}))));
- const totalOutputs=['schedule','summary'].flatMap(()=>['1','2','3','4','5'].map(id=>({dataset:{personTotal:id},textContent:''})));
+ const totalOutputs=['schedule','summary'].flatMap(()=>['1','2','3','4','5'].map(id=>({dataset:{personTotal:id},value:''})));
  fresh.ctx.document.querySelectorAll=selector=>selector==='[data-quota-id]'?inputs:selector==='[data-person-total]'?totalOutputs:[];
  fresh.run('onQuotaInput({value:"4"},"4","dawn")');
  for(const input of inputs)assert.equal(input.value,input.dataset.quotaId==='4'&&input.dataset.quotaCategory==='dawn'?'4':'original');
  assert.equal(fresh.run('activeMonth().categoryQuotas["2"].dawn'),1);
  assert.equal(fresh.element('quotaTotal').textContent,14);
  assert.equal(fresh.element('categoryTotal-card').textContent,4);assert.equal(fresh.element('categoryTotal-dawn').textContent,10);
- for(const output of totalOutputs)assert.equal(output.textContent,output.dataset.personTotal==='4'?4:output.dataset.personTotal==='2'?2:output.dataset.personTotal==='3'?3:output.dataset.personTotal==='1'?5:0);
+ for(const output of totalOutputs)assert.equal(output.value,output.dataset.personTotal==='4'?4:output.dataset.personTotal==='2'?2:output.dataset.personTotal==='3'?3:output.dataset.personTotal==='1'?5:0);
  fresh.run('onQuotaInput({value:"3"},"2","card")');
  for(const input of inputs)if(input.dataset.quotaCategory==='card')assert.equal(input.value,input.dataset.quotaId==='2'?'3':'original');
  fresh.run('onQuotaChange("4","4","dawn")');
@@ -355,6 +355,22 @@ for(const standalone of [false,true]){
  reloaded.run('undo()');assert.equal(reloaded.run('payRate(state,"1","dawn")'),75.5);
 }
 console.log('PASS: role-based dawn defaults, exactly two rate fields, unified red/blue pay, editable cents, Excel parity, persistence, old-form import and undo in source/standalone');
+for(const standalone of [false,true]){
+ const total=boot(null,standalone);
+ total.run('selectMonth("2026-11");activeMonth().cells={"1|1":{code:"M",block:"",locked:false},"1|2":{code:"R",block:"",locked:false},"1|3":{code:"X",block:"",locked:false}};onQuotaChange("1","2","card");onQuotaChange("1","3","dawn")');
+ const inputs=['schedule','summary'].map(()=>({dataset:{quotaId:'1',quotaCategory:'total',personTotal:'1'},value:'5'})),statuses=inputs.map(()=>({dataset:{quotaStatus:'1',category:'total'},textContent:''}));
+ total.ctx.document.querySelectorAll=selector=>selector==='[data-quota-id]'||selector==='[data-person-total]'?inputs:selector==='[data-quota-status]'?statuses:[];
+ total.ctx.totalInput=inputs[0];inputs[0].value='8';total.run('onQuotaInput(totalInput,"1","total")');
+ assert.equal(inputs[0].value,'8');assert.equal(String(inputs[1].value),'8');assert.equal(total.element('quotaTotal').textContent,8);assert(statuses.every(status=>status.textContent==='ขาด 5'));
+ assert.equal(total.run('activeMonth().quotas["1"]'),undefined,'preview cannot commit a goal');
+ inputs[0].value='';total.run('onQuotaInput(totalInput,"1","total")');assert.equal(inputs[0].value,'');assert.equal(String(inputs[1].value),'5');
+ total.run('onQuotaChange("1","8","total")');assert.equal(total.run('activeMonth().categoryQuotas["1"]'),undefined);assert.equal(total.run('activeMonth().quotas["1"]'),8);
+ assert.equal(total.run('categoryCountInfo(state,state.selected,"1","total").hint'),'ขาด 5');
+ const before=total.run('JSON.stringify(state)'),history=total.run('history.length');for(const invalid of ['31','-1','1.5'])total.run('onQuotaChange("1","'+invalid+'","total")');assert.equal(total.run('JSON.stringify(state)'),before);assert.equal(total.run('history.length'),history);
+ total.run('onQuotaChange("1","","total")');assert.equal(total.run('categoryCountInfo(state,state.selected,"1","total").value'),3);assert.equal(total.run('categoryCountInfo(state,state.selected,"1","total").status'),'auto');
+ total.run('undo()');assert.equal(total.run('activeMonth().quotas["1"]'),8);total.run('undo()');assert.equal(total.run('JSON.stringify(activeMonth().categoryQuotas["1"])'),'{"card":2,"dawn":3}');
+}
+console.log('PASS: editable total fields, synchronized previews and hints, clearable input, replace-category semantics, range validation and undo in source/standalone');
 (async()=>{
  for(const standalone of [false,true]){
   const distributed=boot(null,standalone);
@@ -391,6 +407,15 @@ console.log('PASS: role-based dawn defaults, exactly two rate fields, unified re
   pending=[{dataset:{quotaId:'9',quotaCategory:'dawn',quotaEdited:'true'},value:'2'},{dataset:{quotaId:'1',quotaCategory:'card',quotaEdited:'true'},value:'5'}];await clickAuto();
   assert.equal(revised.run('categoryTotals(totals(state,state.selected)[0]).card'),5);assert.equal(revised.run('totals(state,state.selected).find(t=>t.id==="9").X'),2);assert.equal(revised.run('scheduleAudit().complete'),true);
   pending=[{dataset:{quotaId:'9',quotaCategory:'dawn',quotaEdited:'true'},value:''}];await clickAuto();assert.equal(revised.run('activeMonth().categoryQuotas["9"]'),undefined);assert.equal(revised.run('totals(state,state.selected).find(t=>t.id==="9").X'),1);
+  // The editable total replaces per-category goals and is read before blur as well.
+  pending=[{dataset:{quotaId:'1',quotaCategory:'total',quotaEdited:'true'},value:'6'}];await clickAuto();
+  assert.equal(revised.run('totals(state,state.selected)[0].total'),6);assert.equal(revised.run('activeMonth().quotas["1"]'),6);assert.equal(revised.run('activeMonth().categoryQuotas["1"]'),undefined);assert.equal(revised.run('categoryCountInfo(state,state.selected,"1","total").hint'),'ครบ');
+  pending=[{dataset:{quotaId:'1',quotaCategory:'total',quotaEdited:'true'},value:'0'},{dataset:{quotaId:'9',quotaCategory:'total',quotaEdited:'true'},value:'3'}];await clickAuto();
+  assert.equal(revised.run('totals(state,state.selected)[0].total'),0);assert.equal(revised.run('totals(state,state.selected)[8].X'),3);assert.equal(revised.run('scheduleAudit().complete'),true);
+  pending=[{dataset:{quotaId:'1',quotaCategory:'total',quotaEdited:'true'},value:''}];await clickAuto();
+  assert.equal(revised.run('activeMonth().quotas["1"]'),undefined);assert(revised.run('totals(state,state.selected)[0].total')>0);
+  const totalReloaded=boot(JSON.parse(revised.stored()),standalone);assert.equal(totalReloaded.run('activeMonth().quotas["9"]'),3);assert.equal(totalReloaded.run('categoryCountInfo(state,state.selected,"9","total").value'),3);
+  pending=[{dataset:{quotaId:'9',quotaCategory:'dawn',quotaEdited:'true'},value:'2'}];await clickAuto();assert.equal(revised.run('activeMonth().quotas["9"]'),undefined);assert.equal(revised.run('totals(state,state.selected)[8].X'),2);
   const stable=revised.run('JSON.stringify(state)'),history=revised.run('history.length');pending=[{dataset:{quotaId:'1',quotaCategory:'dawn',quotaEdited:'true'},value:'3.5'}];await clickAuto();
   assert.equal(revised.run('JSON.stringify(state)'),stable);assert.equal(revised.run('history.length'),history);assert.equal(revised.element('modalTitle').textContent,'ตรวจเป้าจำนวนเวรก่อนจัด');
   pending=[];revised.run('closeModal();for(let d=1;d<=29;d++)activeMonth().cells["3|"+d]={code:"",block:"OFF",locked:false};onQuotaChange("3","3","dawn")');

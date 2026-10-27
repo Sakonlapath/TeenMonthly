@@ -865,14 +865,14 @@ function view(v){currentView=v;$('scheduleView').classList.toggle('hidden',v!=='
 function selectMonth(m){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)||+m.slice(0,4)<1900||+m.slice(0,4)>2200){toast('เลือกปี ค.ศ. 1900–2200');return}if(typeof cancelPaint==='function')cancelPaint();state.selected=m;if(!state.months[m])state.months[m]=freshMonth(m);changed()}
 function changeMonth(off){selectMonth(monthOffset(state.selected,off))}
 function categoryCountInfo(s,month,id,category){
- const actual=categoryTotals(totals(s,month).find(t=>t.id===id))[category],target=categoryTargets(s,month)[id]?.[category],gap=target===undefined?0:target-actual;
- return{actual,target,value:target??actual,status:target===undefined?'auto':gap>0?'under':gap<0?'over':'complete',hint:target===undefined?'':gap>0?'ขาด '+gap:gap<0?'เกิน '+(-gap):'ครบ'};
+ const t=totals(s,month).find(t=>t.id===id),actual=category==='total'?t.total:categoryTotals(t)[category],target=category==='total'?quotaTargets(s,month)[id]:categoryTargets(s,month)[id]?.[category],gap=target===undefined?0:target-actual;
+ return{actual,target,value:target??(category==='total'?personCategoryTotal(s,month,id):actual),status:target===undefined?'auto':gap>0?'under':gap<0?'over':'complete',hint:target===undefined?'':gap>0?'ขาด '+gap:gap<0?'เกิน '+(-gap):'ครบ'};
 }
 function personCategoryTotal(s,month,id){return SHIFT_GROUPS.reduce((sum,g)=>sum+categoryCountInfo(s,month,id,g.id).value,0)}
-function personTotal(p){return '<output class="person-total" data-person-total="'+esc(p.id)+'" aria-label="รวมเวร '+esc(p.name)+'">'+personCategoryTotal(state,state.selected,p.id)+'</output>'}
+function personTotal(p){return totalEditor(p,{id:'total',label:'รวม'})}
 function totalEditor(p,kind){
- const info=categoryCountInfo(state,state.selected,p.id,kind.id);
- return '<div class="total-editor"><input type="number" min="0" max="'+daysIn(state.selected)+'" step="1" inputmode="numeric" class="quota-input'+'" data-quota-id="'+esc(p.id)+'" data-quota-category="'+kind.id+'" value="'+info.value+'" title="ลงแล้ว '+info.actual+' เวร · พิมพ์ตัวเลขเพื่อกำหนดเป้า หรือล้างเพื่อกลับมานับอัตโนมัติ'+'" aria-label="'+kind.label+' จำนวนเวร '+esc(p.name)+'" oninput="this.dataset.quotaEdited=\'true\';onQuotaInput(this,\''+p.id+'\',\''+kind.id+'\')" onchange="this.dataset.quotaEdited=\'false\';onQuotaChange(\''+p.id+'\',this.value,\''+kind.id+'\')" onblur="if(this.dataset.quotaEdited===\'true\'){this.dataset.quotaEdited=\'false\';onQuotaChange(\''+p.id+'\',this.value,\''+kind.id+'\')}"><small class="quota-status" data-quota-status="'+esc(p.id)+'" data-category="'+kind.id+'" data-state="'+info.status+'" title="ลงแล้ว '+info.actual+' เวร">'+info.hint+'</small></div>';
+ const info=categoryCountInfo(state,state.selected,p.id,kind.id),isTotal=kind.id==='total';
+ return '<div class="total-editor"><input type="number" min="0" max="'+daysIn(state.selected)+'" step="1" inputmode="numeric" class="quota-input'+(isTotal?' person-total':'')+'" data-quota-id="'+esc(p.id)+'" data-quota-category="'+kind.id+'" value="'+info.value+'"'+(isTotal?' data-person-total="'+esc(p.id)+'"':'')+' title="ลงแล้ว '+info.actual+' เวร · '+(isTotal?'กรอกเป้ารวมเพื่อให้ระบบแบ่งห้องบัตรและรุ่งอรุณใหม่ แทนเป้าแยกประเภทของคนนี้ · ล้างเพื่อกลับมาบวกสองช่อง':'พิมพ์ตัวเลขเพื่อกำหนดเป้า หรือล้างเพื่อกลับมานับอัตโนมัติ')+'" aria-label="'+kind.label+' จำนวนเวร '+esc(p.name)+'" oninput="this.dataset.quotaEdited=\'true\';onQuotaInput(this,\''+p.id+'\',\''+kind.id+'\')" onchange="this.dataset.quotaEdited=\'false\';onQuotaChange(\''+p.id+'\',this.value,\''+kind.id+'\')" onblur="if(this.dataset.quotaEdited===\'true\'){this.dataset.quotaEdited=\'false\';onQuotaChange(\''+p.id+'\',this.value,\''+kind.id+'\')}"><small class="quota-status" data-quota-status="'+esc(p.id)+'" data-category="'+kind.id+'" data-state="'+info.status+'" title="ลงแล้ว '+info.actual+' เวร">'+info.hint+'</small></div>';
 }
 function targetSum(s,month){
  const categories=categoryTargets(s,month);let total;
@@ -880,9 +880,9 @@ function targetSum(s,month){
  return monthPeople(s,month).reduce((sum,p)=>sum+(total[p.id]??personCategoryTotal(s,month,p.id)),0);
 }
 function categoryTargetSums(s,month){return Object.fromEntries(SHIFT_GROUPS.map(g=>[g.id,monthPeople(s,month).reduce((sum,p)=>sum+categoryCountInfo(s,month,p.id,g.id).value,0)]))}
-function updateTargetTotals(s){
+function updateTargetTotals(s,skipInput=null){
  $('quotaTotal').textContent=targetSum(s,s.selected);const sums=categoryTargetSums(s,s.selected);for(const g of SHIFT_GROUPS)$('categoryTotal-'+g.id).textContent=sums[g.id];
- document.querySelectorAll('[data-person-total]').forEach(el=>{el.textContent=personCategoryTotal(s,s.selected,el.dataset.personTotal)});
+ document.querySelectorAll('[data-person-total]').forEach(el=>{if(el!==skipInput)el.value=categoryCountInfo(s,s.selected,el.dataset.personTotal,'total').value});
  document.querySelectorAll('[data-quota-status]').forEach(el=>{const info=categoryCountInfo(s,s.selected,el.dataset.quotaStatus,el.dataset.category);el.textContent=info.hint;el.dataset.state=info.status;el.title='ลงแล้ว '+info.actual+' เวร'});
 }
 function render(){
@@ -1009,29 +1009,33 @@ function setCategoryTarget(s,pid,category,val){
  m.quotas={...(m.quotas||s.quotas||{})};for(const id of ids)delete m.quotas[id];
  categoryTargets(s,s.selected);quotaTargets(s,s.selected);
 }
+function setTotalTarget(s,pid,val){
+ val=String(val).trim();const m=s.months[s.selected],n=daysIn(s.selected);
+ if(!monthPeople(s,s.selected).some(p=>p.id===pid))throw Error('บุคลากรคนนี้ไม่ได้ลงตารางเดือนนี้');
+ if(val!==''&&(!Number.isInteger(Number(val))||Number(val)<0||Number(val)>n))throw Error('ระบุจำนวนเต็ม 0–'+n+' หรือเว้นว่าง');
+ m.quotas={...(m.quotas||s.quotas||{})};
+ if(val==='')delete m.quotas[pid];else{m.quotas[pid]=Number(val);if(m.categoryQuotas)delete m.categoryQuotas[pid]}
+ quotaTargets(s,s.selected);
+}
+function setQuotaTarget(s,pid,category,val){if(category==='total')setTotalTarget(s,pid,val);else setCategoryTarget(s,pid,category,val)}
 function commitPendingQuotaInputs(){
  const inputs=[...document.querySelectorAll('[data-quota-id]')].filter(input=>input.dataset.quotaEdited==='true');if(!inputs.length)return;
  const draft=clone(state);
- for(const input of inputs)setCategoryTarget(draft,input.dataset.quotaId,input.dataset.quotaCategory,input.value.trim());
+ for(const input of inputs)setQuotaTarget(draft,input.dataset.quotaId,input.dataset.quotaCategory,input.value.trim());
  for(const input of inputs)input.dataset.quotaEdited='false';
  if(JSON.stringify(draft)!==JSON.stringify(state)){checkpoint();state=draft;changed()}
 }
 function onQuotaInput(input,pid,category='total'){
  const val=input.value.trim();if(val!==''&&(!Number.isInteger(Number(val))||Number(val)<0||Number(val)>daysIn(state.selected)))return;
- if(category!=='total'){
-  try{const draft=clone(state);setCategoryTarget(draft,pid,category,val);const ids=[pid];document.querySelectorAll('[data-quota-id]').forEach(el=>{if(el!==input&&ids.includes(el.dataset.quotaId)&&el.dataset.quotaCategory===category)el.value=val===''?categoryCountInfo(draft,state.selected,el.dataset.quotaId,category).value:input.value});updateTargetTotals(draft)}catch(e){}return;
- }
- const ids=[pid];document.querySelectorAll('[data-quota-id]').forEach(el=>{if(el!==input&&ids.includes(el.dataset.quotaId))el.value=input.value});const targets={...quotaTargets(state,state.selected)};ids.forEach(id=>{if(val==='')delete targets[id];else targets[id]=Number(val)});$('quotaTotal').textContent=Object.values(targets).reduce((a,b)=>a+b,0);
+ try{
+  const draft=clone(state);setQuotaTarget(draft,pid,category,val);
+  document.querySelectorAll('[data-quota-id]').forEach(el=>{if(el!==input&&el.dataset.quotaId===pid&&el.dataset.quotaCategory===category)el.value=val===''?categoryCountInfo(draft,state.selected,pid,category).value:input.value});
+  updateTargetTotals(draft,input);
+ }catch(e){}
 }
 function onQuotaChange(pid,val,category='total'){
- val=String(val).trim();const n=daysIn(state.selected);
- if(val!==''&&(!Number.isInteger(Number(val))||Number(val)<0||Number(val)>n)){toast('ระบุจำนวนเต็ม 0–'+n+' หรือเว้นว่าง');render();return}
- if(category!=='total'){
-  try{const draft=clone(state);setCategoryTarget(draft,pid,category,val);checkpoint();state=draft;changed();toast('บันทึกจำนวนเวรของบุคลากรคนนี้แล้ว')}catch(e){toast(e.message);render()}return;
- }
- const next={...quotaTargets(state,state.selected)},ids=[pid];
- ids.forEach(id=>{if(val==='')delete next[id];else next[id]=Number(val)});
- checkpoint();const stored={...(activeMonth().quotas||state.quotas||{})};for(const id of ids)delete stored[id];activeMonth().quotas={...stored,...next};if(activeMonth().categoryQuotas)for(const id of ids)delete activeMonth().categoryQuotas[id];changed();toast('บันทึกเป้าหมายแล้ว · จำนวนเวรที่ยังไม่ครบจะแสดงเตือน');
+ val=String(val).trim();
+ try{const draft=clone(state);setQuotaTarget(draft,pid,category,val);if(JSON.stringify(draft)!==JSON.stringify(state)){checkpoint();state=draft;changed()}else render();toast(category==='total'?'บันทึกเป้ารวมแล้ว · ระบบจะแบ่งห้องบัตรและรุ่งอรุณใหม่':'บันทึกจำนวนเวรของบุคลากรคนนี้แล้ว')}catch(e){toast(e.message);render()}
 }
 function exportDetailsModal(){const m=activeMonth();modal('ข้อมูลหัวเอกสารส่งออก','<label class="field">เลขที่คำสั่ง<input id="exportOrder" maxlength="60" value="'+esc(m.exportMeta?.orderNumber||'')+'"></label><label class="field">วันที่ออกคำสั่ง<input type="date" id="exportDate" value="'+esc(m.exportMeta?.issuedDate||'')+'"></label><p class="help">เว้นว่างเพื่อกรอกภายหลังได้</p>','<button onclick="closeModal()">ยกเลิก</button><button class="primary" onclick="saveExportDetails()">บันทึก</button>')}
 function saveExportDetails(){checkpoint();activeMonth().exportMeta={orderNumber:$('exportOrder').value.trim(),issuedDate:$('exportDate').value};changed();closeModal();toast('บันทึกข้อมูลหัวเอกสารแล้ว')}
