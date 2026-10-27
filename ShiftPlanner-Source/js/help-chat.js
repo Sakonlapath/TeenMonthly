@@ -1,15 +1,17 @@
-/* Local action chat: open shift dates or record a person's OFF/VAC days. */
+/* Local action chat: add or cancel shift dates and a person's OFF/VAC days. */
 const CHAT_MONTH_NAMES=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 const CHAT_MONTH_SHORT=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CHAT_MONTH_CASUAL=['มกรา','กุมภา','มีนา','เมษา','พฤษภา','มิถุนา','กรกฎา','สิงหา','กันยา','ตุลา','พฤศจิกา','ธันวา'];
 const CHAT_ACTIONS=[
  {id:'outreach',label:'เลือกวันออก รพ.สต.',topic:'วันออก รพ.สต.',code:'X',kind:'need'},
- {id:'dawn',label:'วันห้องบัตร (ร)',topic:'วันห้องบัตร (ร)',code:'R',kind:'need'},
+ {id:'dawn',label:'วันหน้าตู้KIOS (ร)',topic:'วันหน้าตู้KIOS (ร)',code:'R',kind:'need'},
  {id:'off',label:'OFF',topic:'OFF',code:'OFF',kind:'leave'},
  {id:'vac',label:'Vac',topic:'Vac',code:'VAC',kind:'leave'}
 ];
-let helpMessages=[],outreachChat={step:'idle',action:'outreach',month:'',pid:'',daysText:''};
+let helpMessages=[],outreachChat={step:'idle',operation:'add',action:'outreach',month:'',pid:'',daysText:''};
 function currentChatAction(){return CHAT_ACTIONS.find(a=>a.id===outreachChat.action)||CHAT_ACTIONS[0]}
+function removingChatDays(){return outreachChat.operation==='remove'}
+function chatActionLabel(action){return removingChatDays()?'ยกเลิก '+action.topic:action.label}
 function chatPeopleForMonth(s,month){return s.months[month]?monthPeople(s,month):s.people}
 
 function validChatMonth(month){return /^\d{4}-(0[1-9]|1[0-2])$/.test(month)&&+month.slice(0,4)>=1900&&+month.slice(0,4)<=2200}
@@ -53,6 +55,23 @@ function shiftMonthWithDays(s,month,days,code){
  return m;
 }
 function outreachMonthWithDays(s,month,days){return shiftMonthWithDays(s,month,days,'X')}
+function cancelMonthDays(s,month,days,code,pid=''){
+ if(!validChatMonth(month)||!Array.isArray(days)||!days.length||days.some(d=>!Number.isInteger(d)||d<1||d>daysIn(month)))throw Error('เดือนหรือวันที่ไม่ถูกต้องค่ะ');
+ if(!['R','X','OFF','VAC'].includes(code))throw Error('ประเภทรายการที่ต้องการยกเลิกไม่ถูกต้องค่ะ');
+ const shift=['R','X'].includes(code);
+ if(!shift&&!s.people.some(p=>p.id===pid))throw Error('กรุณาเลือกบุคลากรให้ถูกต้องค่ะ');
+ if(!s.months[month])return null;
+ const m=clone(s.months[month]),selected=new Set(days);
+ if(shift)for(const d of selected){m.days[d].need[code]=0;if(m.autoCapacity)m.autoCapacity[d]={...(m.autoCapacity[d]||m.days[d].need),[code]:0}}
+ for(const[k,c]of Object.entries(m.cells)){
+  const[id,day]=k.split('|');if(!selected.has(Number(day)))continue;
+  if(shift&&c.code===code){c.code='';c.locked=false}
+  else if(!shift&&id===pid&&c.block===code)c.block='';
+  else continue;
+  if(!c.code&&!c.block)delete m.cells[k];
+ }
+ return m;
+}
 function leaveMonthWithDays(s,month,pid,days,code){
  if(!validChatMonth(month)||!Array.isArray(days)||!days.length||days.some(d=>!Number.isInteger(d)||d<1||d>daysIn(month)))throw Error('เดือนหรือวันที่ไม่ถูกต้องค่ะ');
  if(!['OFF','VAC'].includes(code))throw Error('ประเภทวันหยุดไม่ถูกต้องค่ะ');
@@ -75,15 +94,16 @@ function renderHelpChat(){
  log.innerHTML=helpMessages.map(helpMessageMarkup).join('');
  if(outreachChat.step==='month'){
   const person=state.people.find(p=>p.id===outreachChat.pid);
-  controls.innerHTML='<form class="help-action-form" onsubmit="chooseOutreachMonth();return false">'+(action.kind==='leave'?'<div class="help-month-choice"><b>'+esc(person?.name||'ยังไม่ได้เลือกบุคลากร')+'</b><button type="button" class="textbtn" onclick="changeChatPerson()">เปลี่ยนบุคลากร</button></div>':'')+'<label for="helpMonth">เลือกเดือนสำหรับ'+esc(action.topic)+'</label><div class="help-input-row"><input id="helpMonth" type="month" min="1900-01" max="2200-12" value="'+esc(outreachChat.month||state.selected)+'" required><button class="primary" type="submit">เลือกเดือนนี้</button></div></form>';
+  controls.innerHTML='<form class="help-action-form" onsubmit="chooseOutreachMonth();return false">'+(action.kind==='leave'?'<div class="help-month-choice"><b>'+esc(person?.name||'ยังไม่ได้เลือกบุคลากร')+'</b><button type="button" class="textbtn" onclick="changeChatPerson()">เปลี่ยนบุคลากร</button></div>':'')+'<label for="helpMonth">เลือกเดือนสำหรับ'+esc(removingChatDays()?chatActionLabel(action):action.topic)+'</label><div class="help-input-row"><input id="helpMonth" type="month" min="1900-01" max="2200-12" value="'+esc(outreachChat.month||state.selected)+'" required><button class="primary" type="submit">เลือกเดือนนี้</button></div></form>';
  }else if(outreachChat.step==='person'){
-  controls.innerHTML='<form class="help-action-form" onsubmit="chooseChatPerson();return false"><label for="helpPerson">เลือกบุคลากรสำหรับ '+esc(action.label)+'</label><div class="help-input-row"><select id="helpPerson" required><option value="">เลือกบุคลากร</option>'+state.people.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>').join('')+'</select><button class="primary" type="submit">เลือกคนนี้</button></div></form>';
+  controls.innerHTML='<form class="help-action-form" onsubmit="chooseChatPerson();return false"><label for="helpPerson">เลือกบุคลากรสำหรับ '+esc(chatActionLabel(action))+'</label><div class="help-input-row"><select id="helpPerson" required><option value="">เลือกบุคลากร</option>'+state.people.filter(p=>removingChatDays()||canUseSymbol(p,action.code)).map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>').join('')+'</select><button class="primary" type="submit">เลือกคนนี้</button></div></form>';
  }else if(outreachChat.step==='days'){
-  const person=state.people.find(p=>p.id===outreachChat.pid),hint=action.kind==='need'?'เพิ่ม'+action.topic+' วันละอย่างน้อย 1 คน':'ลง '+action.label+' ให้ '+(person?.name||'บุคลากรที่เลือก');
-  controls.innerHTML='<form class="help-action-form" onsubmit="submitOutreachDays();return false"><div class="help-month-choice"><b>'+esc(monthLabel(outreachChat.month))+'</b><button type="button" class="textbtn" onclick="changeOutreachMonth()">เปลี่ยนเดือน</button></div>'+(action.kind==='leave'?'<div class="help-month-choice"><span>'+esc(person?.name||'ยังไม่ได้เลือกบุคลากร')+'</span><button type="button" class="textbtn" onclick="changeChatPerson()">เปลี่ยนบุคลากร</button></div>':'')+'<label for="helpDays">วันที่เท่าไหร่บ้างคะ</label><div class="help-input-row"><input id="helpDays" type="text" maxlength="300" value="'+esc(outreachChat.daysText)+'" placeholder="เช่น 3, 5-6" autocomplete="off" required><button class="primary" type="submit">บันทึกวัน</button></div><small>'+esc(hint)+'</small></form>';
+  const person=state.people.find(p=>p.id===outreachChat.pid),hint=removingChatDays()?(action.kind==='need'?'ปิดวันและลบเวร'+action.topic+' ในวันที่เลือก รวมช่องที่ล็อกไว้':'ล้างเฉพาะ '+action.label+' ของ '+(person?.name||'บุคลากรที่เลือก')):(action.kind==='need'?'เพิ่ม'+action.topic+' วันละอย่างน้อย 1 คน':'ลง '+action.label+' ให้ '+(person?.name||'บุคลากรที่เลือก'));
+  controls.innerHTML='<form class="help-action-form" onsubmit="submitOutreachDays();return false"><div class="help-month-choice"><b>'+esc(monthLabel(outreachChat.month))+'</b><button type="button" class="textbtn" onclick="changeOutreachMonth()">เปลี่ยนเดือน</button></div>'+(action.kind==='leave'?'<div class="help-month-choice"><span>'+esc(person?.name||'ยังไม่ได้เลือกบุคลากร')+'</span><button type="button" class="textbtn" onclick="changeChatPerson()">เปลี่ยนบุคลากร</button></div>':'')+'<label for="helpDays">วันที่เท่าไหร่บ้างคะ</label><div class="help-input-row"><input id="helpDays" type="text" maxlength="300" value="'+esc(outreachChat.daysText)+'" placeholder="เช่น 3, 5-6" autocomplete="off" required><button class="primary" type="submit">'+(removingChatDays()?'ยกเลิกวันที่เลือก':'บันทึกวัน')+'</button></div><small>'+esc(hint)+'</small></form>';
  }else{
-  controls.innerHTML='<div class="help-action-grid">'+CHAT_ACTIONS.map(a=>'<button class="help-start-action help-action-'+a.id+'" data-chat-action="'+a.id+'" type="button" onclick="startChatAction(\''+a.id+'\')">'+esc(a.label)+'</button>').join('')+'</div>';
+  controls.innerHTML='<div class="help-operation-tabs" role="group" aria-label="เพิ่มหรือยกเลิกวัน">'+[['add','เพิ่ม / ลงวัน'],['remove','ยกเลิกวัน']].map(([id,label])=>'<button type="button" data-chat-operation="'+id+'" aria-pressed="'+((outreachChat.operation||'add')===id)+'" onclick="setChatOperation(\''+id+'\')">'+label+'</button>').join('')+'</div><div class="help-action-grid">'+CHAT_ACTIONS.map(a=>'<button class="help-start-action help-action-'+a.id+(removingChatDays()?' help-remove-action':'')+'" data-chat-action="'+a.id+'" type="button" onclick="startChatAction(\''+a.id+'\')">'+esc(chatActionLabel(a))+'</button>').join('')+'</div>';
  }
+ if(['month','person','days'].includes(outreachChat.step))controls.innerHTML+='<button class="textbtn help-cancel-entry" type="button" onclick="cancelChatEntry()">ยกเลิกการกรอก</button>';
  log.scrollTop=log.scrollHeight;
  if(outreachChat.step==='days')$('helpDays').focus?.({preventScroll:true});
  if(outreachChat.step==='person')$('helpPerson').focus?.({preventScroll:true});
@@ -91,8 +111,18 @@ function renderHelpChat(){
 function startChatAction(id){
  if(!outreachChatOpen())return;
  const action=CHAT_ACTIONS.find(a=>a.id===id);if(!action)return;
- helpMessages.push({side:'user',text:action.label},{side:'guide',text:action.kind==='leave'?'ต้องการลง '+action.label+' ให้ใครคะ':'ต้องการลง'+action.topic+' เดือนอะไรคะ'});
- outreachChat={step:action.kind==='leave'?'person':'month',action:id,month:action.kind==='leave'?'':state.selected,pid:'',daysText:''};renderHelpChat();
+ const label=chatActionLabel(action);
+ helpMessages.push({side:'user',text:label},{side:'guide',text:action.kind==='leave'?'ต้องการ'+(removingChatDays()?'ยกเลิก ':'ลง ')+action.label+' ให้ใครคะ':'ต้องการ'+(removingChatDays()?'ยกเลิก':'ลง')+action.topic+' เดือนอะไรคะ'});
+ outreachChat={step:action.kind==='leave'?'person':'month',operation:outreachChat.operation||'add',action:id,month:action.kind==='leave'?'':state.selected,pid:'',daysText:''};renderHelpChat();
+}
+function setChatOperation(operation){
+ if(!outreachChatOpen()||!['idle','done'].includes(outreachChat.step)||!['add','remove'].includes(operation))return;
+ outreachChat={step:'idle',operation,action:'outreach',month:'',pid:'',daysText:''};renderHelpChat();
+}
+function cancelChatEntry(){
+ if(!outreachChatOpen()||!['month','person','days'].includes(outreachChat.step))return;
+ outreachChat={step:'idle',operation:outreachChat.operation||'add',action:'outreach',month:'',pid:'',daysText:''};
+ helpMessages.push({side:'guide',text:'ยกเลิกการกรอกแล้วค่ะ ยังไม่ได้เปลี่ยนตาราง'});renderHelpChat();
 }
 function startOutreachChat(){startChatAction('outreach')}
 function chooseOutreachMonth(){
@@ -101,7 +131,7 @@ function chooseOutreachMonth(){
  if(!validChatMonth(month)){helpMessages.push({side:'guide',text:'กรุณาเลือกเดือนและปีให้ถูกต้องค่ะ'});renderHelpChat();return}
  const action=currentChatAction();
  if(action.kind==='leave'&&!state.people.some(p=>p.id===outreachChat.pid)){outreachChat.step='person';helpMessages.push({side:'guide',text:'กรุณาเลือกบุคลากรก่อนค่ะ'});renderHelpChat();return}
- if(action.kind==='leave'&&!chatPeopleForMonth(state,month).some(p=>p.id===outreachChat.pid)){
+ if(action.kind==='leave'&&!removingChatDays()&&!chatPeopleForMonth(state,month).some(p=>p.id===outreachChat.pid)){
   outreachChat.month=month;helpMessages.push({side:'user',text:monthLabel(month)},{side:'guide',text:'บุคลากรคนนี้ไม่ได้ลงตาราง '+monthLabel(month)+' ค่ะ เลือกเดือนอื่น หรือเพิ่มคนนี้ผ่านเมนูบุคลากรได้ค่ะ'});renderHelpChat();return;
  }
  outreachChat={...outreachChat,step:'days',month,daysText:''};
@@ -113,7 +143,8 @@ function chooseChatPerson(){
  if(!outreachChatOpen()||outreachChat.step!=='person')return;
  const person=state.people.find(p=>p.id===$('helpPerson').value);
  if(!person){helpMessages.push({side:'guide',text:'กรุณาเลือกบุคลากรให้ถูกต้องค่ะ'});renderHelpChat();return}
- outreachChat.pid=person.id;outreachChat.step='month';outreachChat.month='';outreachChat.daysText='';helpMessages.push({side:'user',text:person.name},{side:'guide',text:'ต้องการลง '+currentChatAction().label+' เดือนอะไรคะ'});renderHelpChat();
+ if(!removingChatDays()&&!canUseSymbol(person,currentChatAction().code)){helpMessages.push({side:'guide',text:person.name+' รับได้เฉพาะ รพ.สต. (ร สีแดง) หรือช่องว่างค่ะ'});renderHelpChat();return}
+ outreachChat.pid=person.id;outreachChat.step='month';outreachChat.month='';outreachChat.daysText='';helpMessages.push({side:'user',text:person.name},{side:'guide',text:'ต้องการ'+(removingChatDays()?'ยกเลิก ':'ลง ')+currentChatAction().label+' เดือนอะไรคะ'});renderHelpChat();
 }
 function changeChatPerson(){
  if(!outreachChatOpen()||currentChatAction().kind!=='leave')return;
@@ -127,13 +158,15 @@ function submitOutreachDays(){
  if(!outreachChatOpen()||outreachChat.step!=='days')return;
  const raw=$('helpDays').value.trim();outreachChat.daysText=raw;
  let days,next;const action=currentChatAction();
- try{days=parseOutreachDays(raw,outreachChat.month);next=action.kind==='need'?shiftMonthWithDays(state,outreachChat.month,days,action.code):leaveMonthWithDays(state,outreachChat.month,outreachChat.pid,days,action.code)}catch(e){helpMessages.push({side:'user',text:raw},{side:'guide',text:e.message});renderHelpChat();return}
+ try{days=parseOutreachDays(raw,outreachChat.month);next=removingChatDays()?cancelMonthDays(state,outreachChat.month,days,action.code,outreachChat.pid):action.kind==='need'?shiftMonthWithDays(state,outreachChat.month,days,action.code):leaveMonthWithDays(state,outreachChat.month,outreachChat.pid,days,action.code)}catch(e){helpMessages.push({side:'user',text:raw},{side:'guide',text:e.message});renderHelpChat();return}
+ if(removingChatDays()&&(!next||JSON.stringify(next)===JSON.stringify(state.months[outreachChat.month]))){outreachChat.step='done';outreachChat.daysText='';helpMessages.push({side:'user',text:raw},{side:'guide',text:'ไม่มีรายการ'+action.topic+' ที่ต้องยกเลิกในวันที่เลือกค่ะ ตารางยังเหมือนเดิม'});renderHelpChat();return}
  const month=outreachChat.month,needsChange=state.selected!==month||!state.months[month]||JSON.stringify(next)!==JSON.stringify(state.months[month]);
  outreachChat.step='done';
  if(typeof cancelPaint==='function')cancelPaint();
  if(needsChange)checkpoint();state.months[month]=next;state.selected=month;view('schedule');changed();
  const person=state.people.find(p=>p.id===outreachChat.pid),reply=action.kind==='need'?'บันทึก'+action.topic+' วันที่ '+days.join(', ')+' '+monthLabel(month)+' แล้วค่ะ\nกดหัววันที่เพื่อตรวจจำนวนคน หรือกด “จัดเวรอัตโนมัติ” เพื่อจัดบุคลากรลงเวรได้ค่ะ':'บันทึก '+action.label+' ให้ '+person.name+' วันที่ '+days.join(', ')+' '+monthLabel(month)+' แล้วค่ะ';
- helpMessages.push({side:'user',text:raw},{side:'guide',text:reply});
- outreachChat.daysText='';renderHelpChat();toast('บันทึก'+action.topic+'แล้ว');
+ const cancellation='ยกเลิก'+action.topic+(action.kind==='leave'?' ของ '+person.name:'')+' วันที่ '+days.join(', ')+' '+monthLabel(month)+' แล้วค่ะ\nย้อนกลับได้ด้วยปุ่ม “ย้อนกลับ” ในตาราง';
+ helpMessages.push({side:'user',text:raw},{side:'guide',text:removingChatDays()?cancellation:reply});
+ outreachChat.daysText='';renderHelpChat();toast((removingChatDays()?'ยกเลิก':'บันทึก')+action.topic+'แล้ว');
 }
-function resetHelpChat(){helpMessages=[];outreachChat={step:'idle',action:'outreach',month:'',pid:'',daysText:''};helpModal()}
+function resetHelpChat(){helpMessages=[];outreachChat={step:'idle',operation:'add',action:'outreach',month:'',pid:'',daysText:''};helpModal()}

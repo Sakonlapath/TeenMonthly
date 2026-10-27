@@ -30,13 +30,13 @@ function exportModel(s,month,csv=false){
    put('AI'+row,t.N+t.M+t.A,38,'COUNTIF(D'+row+':AH'+row+',"ด")+COUNTIF(D'+row+':AH'+row+',"ช")+COUNTIF(D'+row+':AH'+row+',"บ")');
    put('AJ'+row,t.R+t.X,101,'COUNTIF(D'+row+':AH'+row+',"ร")');
    put('AK'+row,t.total,101,'AI'+row+'+AJ'+row);
-   const cardRate=payRate(s,p.id,'card'),dawnRate=payRate(s,p.id,'dawn'),outreachRate=payRate(s,p.id,'outreach');
-   put('AM'+row,cardRate,0);put('AN'+row,dawnRate,0);put('AO'+row,outreachRate,0);
+   const cardRate=payRate(s,p.id,'card'),dawnRate=payRate(s,p.id,'dawn');
+   put('AM'+row,cardRate,0);put('AN'+row,dawnRate,0);put('AO'+row,'',0);
    // Hidden raw codes keep the two identically displayed R shifts separate.
    for(let d=1;d<=31;d++)put(excelColumn(d+43)+row,d<=n?cell(m,p.id,d).code:'',0);
    put('AP'+row,t.R,0,'COUNTIF(AR'+row+':BV'+row+',"R")');
    put('AQ'+row,t.X,0,'COUNTIF(AR'+row+':BV'+row+',"X")');
-   const formula=cardRate===dawnRate&&cardRate===outreachRate?'AK'+row+'*'+cardRate:'ROUND(AI'+row+'*AM'+row+'+AP'+row+'*AN'+row+'+AQ'+row+'*AO'+row+',2)';
+   const formula='ROUND(AI'+row+'*AM'+row+'+AJ'+row+'*AN'+row+',2)';
    put('AL'+row,totalPay(s,t),EXPORT_TEMPLATE.styleIds.money,formula);
   }else for(const col of ['AI','AJ','AK','AL'])put(col+row,'');
  }

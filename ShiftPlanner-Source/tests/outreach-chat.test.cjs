@@ -40,3 +40,28 @@ for(const code of ['OFF','VAC']){
 assert.equal(run('JSON.stringify(s)'),run('leaveBefore'));
 run('var futureLeave=leaveMonthWithDays(s,"2028-02","3",[29],"VAC")');assert.equal(run('futureLeave.cells["3|29"].block'),'VAC');assert.equal(run('s.months["2028-02"]'),undefined);
 console.log('PASS: date lists/ranges, Thai numerals/months/years, invalid dates, cached capacity, retained shifts/targets and atomic month creation');
+// Cancel an opened date and every matching shift, including locks and omitted staff.
+run('var cancelState=clone(s);var cm=cancelState.months["2026-11"];cm.days[3].need.X=2;cm.days[5].need.X=1;cm.days[6].need.X=1;cm.autoCapacity[3].X=3;cm.cells["2|3"]={code:"X",block:"",locked:true};cm.cells["9|3"]={code:"X",block:"",locked:true};cm.cells["3|5"]={code:"X",block:"OFF",locked:true};cm.cells["4|6"]={code:"R",block:"",locked:true};cm.cells["5|10"]={code:"X",block:"",locked:true};var cancelBefore=JSON.stringify(cancelState);var canceled=cancelMonthDays(cancelState,"2026-11",[3,5,6],"X")');
+assert.equal(run('JSON.stringify(cancelState)'),run('cancelBefore'));
+for(const d of [3,5,6]){assert.equal(run('canceled.days['+d+'].need.X'),0);assert.equal(run('canceled.autoCapacity['+d+'].X'),0)}
+assert.equal(run('canceled.cells["2|3"]'),undefined);assert.equal(run('canceled.cells["9|3"]'),undefined);
+assert.equal(run('JSON.stringify(canceled.cells["3|5"])'),'{"code":"","block":"OFF","locked":false}');
+assert.equal(run('JSON.stringify(canceled.cells["1|5"])'),run('JSON.stringify(cm.cells["1|5"])'));
+assert.equal(run('canceled.cells["4|6"].code'),'R');assert.equal(run('canceled.cells["5|10"].code'),'X');
+assert.equal(run('JSON.stringify(canceled.categoryQuotas)'),run('JSON.stringify(cm.categoryQuotas)'));
+for(let d=1;d<=30;d++)for(const code of ['N','M','A','R'])assert.equal(run('canceled.days['+d+'].need.'+code),run('cm.days['+d+'].need.'+code));
+run('var canceledAgain=cancelMonthDays({...cancelState,months:{"2026-11":canceled}},"2026-11",[3,5,6],"X")');assert.equal(run('JSON.stringify(canceledAgain)'),run('JSON.stringify(canceled)'));
+// Blue cancellation never removes red shifts on the same date or changes other dates.
+run('cm.cells["6|6"]={code:"X",block:"",locked:true};var blueCanceled=cancelMonthDays(cancelState,"2026-11",[6],"R")');
+assert.equal(run('blueCanceled.days[6].need.R'),0);assert.equal(run('blueCanceled.autoCapacity[6].R'),0);
+assert.equal(run('blueCanceled.cells["4|6"]'),undefined);assert.equal(run('blueCanceled.cells["6|6"].code'),'X');assert.equal(run('blueCanceled.days[6].need.X'),1);
+// Cancel only the requested absence; preserve shifts, other absence types and people.
+run('cm.cells["1|7"]={code:"A",block:"OFF",locked:true};cm.cells["1|8"]={code:"",block:"VAC",locked:false};cm.cells["2|7"]={code:"",block:"OFF",locked:false};var offCanceled=cancelMonthDays(cancelState,"2026-11",[7,8],"OFF","1")');
+assert.equal(run('JSON.stringify(offCanceled.cells["1|7"])'),'{"code":"A","block":"","locked":true}');assert.equal(run('offCanceled.cells["1|8"].block'),'VAC');assert.equal(run('offCanceled.cells["2|7"].block'),'OFF');
+run('var vacCanceled=cancelMonthDays(cancelState,"2026-11",[8],"VAC","1")');assert.equal(run('vacCanceled.cells["1|8"]'),undefined);
+assert.equal(run('cancelMonthDays(cancelState,"2027-06",[1],"X")'),null);assert.equal(run('cancelState.months["2027-06"]'),undefined);
+for(const args of ['"2026-11",[3,31],"X"','"2026-11",[3],"N"','"2026-11",[3],"OFF","missing"','"2026-13",[3],"R"'])assert.throws(()=>run('cancelMonthDays(cancelState,'+args+')'));
+// A later automatic run must use the canceled capacity instead of restoring X.
+run('var capacityState=clone(SEED);capacityState.selected="2026-11";capacityState.months={"2026-11":freshMonth("2026-11")};capacityState.months["2026-11"].autoCapacity=Object.fromEntries(Object.entries(capacityState.months["2026-11"].days).map(([d,day])=>[d,clone(day.need)]));capacityState.months["2026-11"].days[3].need.X=1;capacityState.months["2026-11"].autoCapacity[3].X=2;capacityState.months["2026-11"]=cancelMonthDays(capacityState,"2026-11",[3],"X");var cancelSolved=solve(capacityState,"2026-11",{distribution:true})');
+assert.equal(run('cancelSolved.ok'),true);assert.equal(run('cancelSolved.month.days[3].need.X'),0);assert.equal(run('Object.values(cancelSolved.month.cells).some(c=>c.code==="X")'),false);
+console.log('PASS: cancellation removes selected needs/cache/locks, retains unrelated data, is idempotent and atomic, clears only the chosen absence and survives automatic scheduling');

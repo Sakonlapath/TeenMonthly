@@ -1,5 +1,5 @@
 /* Direct schedule editing: one drag is one validated, undoable transaction. */
-const PAINT_TOOLS=[['N','ดึก','1'],['M','เช้า','2'],['A','บ่าย','3'],['R','ห้องบัตร','4'],['X','รพ.สต.','5'],['OFF','หยุด','6'],['VAC','ลา','7'],['','ยางลบ','0']];
+const PAINT_TOOLS=[['N','ดึก','1'],['M','เช้า','2'],['A','บ่าย','3'],['R','หน้าตู้KIOS','4'],['X','รพ.สต.','5'],['OFF','หยุด','6'],['VAC','ลา','7'],['','ยางลบ','0']];
 let paintTool=null,paintDrag=null,paintFocus={i:0,d:1},paintRange=null,paintFrame=0;
 const schedule=$('scheduleTable');
 function paintRows(){const included=new Set(monthPeople(state,state.selected).map(p=>p.id));return state.people.map((p,i)=>included.has(p.id)?i:-1).filter(i=>i>=0)}
@@ -109,5 +109,5 @@ document.addEventListener('keydown',e=>{
   const range=paintRange||{i,start:d,end:d};cancelPaint();commitPaint(range.i,range.start,range.end,erase?'':paintTool);focusPaint(i,d);
  }
 });
-function shortcutsModal(){modal('จัดเวรให้ไวขึ้น','<div class="shortcut-list"><p><kbd>1–5</kbd> ดึก · เช้า · บ่าย · ห้องบัตร · รพ.สต.</p><p><kbd>6</kbd> OFF หยุด <kbd>7</kbd> VAC ลา <kbd>0</kbd> ยางลบ</p><p><kbd>ลูกศร</kbd> เลื่อนช่อง <kbd>Shift + ← / →</kbd> เลือกหลายวัน</p><p><kbd>Enter / Space</kbd> ใส่เวรที่เลือก <kbd>Delete</kbd> ลบช่องที่เลือก</p><p><kbd>E</kbd> เปิดรายละเอียด / ปลดล็อก <kbd>Esc</kbd> ยกเลิกการเลือก</p><p><kbd>Ctrl + Z</kbd> ย้อนกลับทั้งชุดที่ลาก (Mac ใช้ Cmd + Z)</p></div><p class="help">เลือกชนิดเวรแล้วลากในแถวเดียวกัน ปล่อยเพื่อบันทึก · เปลี่ยนเป็นโหมดดู / แก้รายช่องเมื่อต้องการเลื่อนตารางบนจอสัมผัส</p><p class="help">เวรที่ลงเองจะล็อกไว้ และคงตารางทั้งเดือนของคนนั้นตอนจัดอัตโนมัติ · คีย์ลัดไม่ทำงานระหว่างกรอกข้อมูลหรือเปิดหน้าต่างแก้ไข</p>')}
+function shortcutsModal(){modal('จัดเวรให้ไวขึ้น','<div class="shortcut-list"><p><kbd>1–5</kbd> ดึก · เช้า · บ่าย · หน้าตู้KIOS · รพ.สต.</p><p><kbd>6</kbd> OFF หยุด <kbd>7</kbd> VAC ลา <kbd>0</kbd> ยางลบ</p><p><kbd>ลูกศร</kbd> เลื่อนช่อง <kbd>Shift + ← / →</kbd> เลือกหลายวัน</p><p><kbd>Enter / Space</kbd> ใส่เวรที่เลือก <kbd>Delete</kbd> ลบช่องที่เลือก</p><p><kbd>E</kbd> เปิดรายละเอียด / ปลดล็อก <kbd>Esc</kbd> ยกเลิกการเลือก</p><p><kbd>Ctrl + Z</kbd> ย้อนกลับทั้งชุดที่ลาก (Mac ใช้ Cmd + Z)</p></div><p class="help">เลือกชนิดเวรแล้วลากในแถวเดียวกัน ปล่อยเพื่อบันทึก · เปลี่ยนเป็นโหมดดู / แก้รายช่องเมื่อต้องการเลื่อนตารางบนจอสัมผัส</p><p class="help">เวรที่ลงเองจะล็อกเฉพาะช่องนั้น ระบบจัดช่องว่างวันอื่นต่อได้ · คีย์ลัดไม่ทำงานระหว่างกรอกข้อมูลหรือเปิดหน้าต่างแก้ไข</p>')}
 renderEditor();
