@@ -36,9 +36,9 @@ s=redDays(fresh(),dates.slice(0,8));s.months[s.selected].excludedStaffIds=['8'];
 plan=c.distributionPlan(s,s.selected);assert.equal(plan.rIds.length,7);assert.equal(plan.xIds.length,8);
 let result=c.solve(s,s.selected,{distribution:true});assert(result.ok,result.message);
 assert.equal(c.totals({...s,months:{[s.selected]:result.month}},s.selected).find(t=>t.id==='8').total,0);
-// A zero personal target leaves the available shifts for other staff.
-s=redDays(fresh(),dates);s.months[s.selected].categoryQuotas={'1':{card:0,dawn:0}};
-result=c.solve(s,s.selected,{distribution:true});assert(result.ok,result.message);assert.equal(c.totals({...s,months:{[s.selected]:result.month}},s.selected)[0].total,0);
+// A zero non-main target leaves available shifts for other staff under the two-day rule.
+s=redDays(fresh(),dates);s.months[s.selected].categoryQuotas={'6':{card:0,dawn:0}};
+result=c.solve(s,s.selected,{distribution:true});assert(result.ok,result.message);assert.equal(c.totals({...s,months:{[s.selected]:result.month}},s.selected)[5].total,0);
 // Locks are preserved even above the previous blue ceiling; unavailable staff are skipped.
 s=redDays(fresh(),dates);for(const d of [1,2,5,6])s.months[s.selected].cells['1|'+d]={code:'R',block:'',locked:true};
 result=c.solve(s,s.selected,{distribution:true});assert(result.ok,result.message);assert(c.totals({...s,months:{[s.selected]:result.month}},s.selected)[0].R>=4);

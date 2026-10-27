@@ -65,7 +65,7 @@ assert.equal(october.people.filter(p=>c.cell(octoberResult.month,p.id,1).code).l
 console.log('PASS: October day 1 fills all 3 slots when every person has a locked shift elsewhere');
 
 // --- New Features Test Suite ---
-// 1. Pair Exclusion Test (พฤกษา '1' ห้ามขึ้นวันเดียวกับ รพีพรรณ '8')
+// 1. Pair Exclusion Test (พฤกษา '1' ห้ามอยู่กะเดียวกับ รพีพรรณ '8')
 let peTest = c.clone(seed);
 peTest.selected = '2026-11';
 peTest.months['2026-11'] = c.freshMonth('2026-11');
@@ -74,13 +74,13 @@ assert(peResult.ok, peResult.message);
 for (let d = 1; d <= 30; d++) {
   let c1 = c.cell(peResult.month, '1', d).code;
   let c8 = c.cell(peResult.month, '8', d).code;
-  assert(!(c1 && c8), 'Day ' + d + ' has both person 1 (' + c1 + ') and person 8 (' + c8 + ') working!');
+  assert(!c.sameShift(c1,c8), 'Day ' + d + ' has both person 1 (' + c1 + ') and person 8 (' + c8 + ') working!');
 }
 // Locked collision rejection
 let peCollision = c.clone(seed);
 peCollision.months['2026-10'] = c.freshMonth('2026-10');
-peCollision.months['2026-10'].cells['1|5'] = {code: 'M', block: '', locked: true};
-peCollision.months['2026-10'].cells['8|5'] = {code: 'A', block: '', locked: true};
+peCollision.months['2026-10'].cells['1|3'] = {code: 'M', block: '', locked: true};
+peCollision.months['2026-10'].cells['8|3'] = {code: 'M', block: '', locked: true};
 assert.equal(c.solve(peCollision, '2026-10').reason, 'fixed');
 let audCollision = c.audit(peCollision, '2026-10');
 assert(audCollision.issues.some(i => i.type === 'exclusion'), 'audit must report exclusion issue');

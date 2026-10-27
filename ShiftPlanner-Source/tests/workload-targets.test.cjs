@@ -6,7 +6,7 @@ function fresh(month='2026-10'){
  return s;
 }
 function arranged(s){
- const before=JSON.stringify(s),r=c.solve(s,s.selected,{distribution:true,ms:2000,nodes:30000});
+ const before=JSON.stringify(s),r=c.solve(s,s.selected,{distribution:true,ms:5000,nodes:180000});
  assert(r.ok,s.selected+' '+JSON.stringify(s.months[s.selected].quotas)+' '+r.message);assert.equal(JSON.stringify(s),before);s=c.clone(s);s.months[s.selected]=r.month;
  assert(c.audit(s,s.selected).complete);const ts=c.totals(s,s.selected),main=ts.filter(t=>['1','2','3','4'].includes(t.id));
  for(const id of ['5','6','7','9'])assert(ts.find(t=>t.id===id).total<=Math.min(...main.map(t=>t.total)));
@@ -15,7 +15,7 @@ function arranged(s){
 // Reallocate a previously filled month, without treating existing automatic cells as locks.
 for(const month of ['2026-10','2026-11']){
  const first=arranged(fresh(month));
- for(const [id,goal]of [['1',6],['2',10],['3',12],['5',18],['8',18],['9',3]]){
+ for(const [id,goal]of [['1',10],['2',10],['3',12],['5',18],['8',18],['9',3]]){
   const s=c.clone(first);s.months[month].quotas={[id]:goal};s.months[month].categoryQuotas={};
   const next=arranged(s);assert.equal(c.totals(next,month).find(t=>t.id===id).total,goal);
  }
@@ -28,17 +28,15 @@ for(const month of ['2026-10','2026-11']){
 // allocating too much to another academic and discovering the conflict at the end.
 let s=fresh();s.months[s.selected].quotas={'5':18};s=arranged(s);
 assert(c.totals(s,s.selected).slice(0,4).every(t=>t.total>=18));
-// A tight but feasible typed goal takes precedence over giving an automatic red
-// shift to everyone: 5 workers need 22 each, leaving only one shift for the others.
-s=fresh();s.months[s.selected].quotas={'5':22};s=arranged(s);
-assert.deepEqual(c.totals(s,s.selected).slice(0,5).map(t=>t.total),[22,22,22,22,22]);
+// A card-only goal of 22 exceeds the N/M/A streak limit; early duties are separate.
+s=fresh();s.months[s.selected].categoryQuotas={'5':{card:22}};const overlong=c.solve(s,s.selected,{distribution:true});assert.equal(overlong.reason,'quota');assert(overlong.message.includes('ห้องบัตรไม่เกิน 2 วันติดกัน'));
 // Rapeephan is a secondary main worker, not an academic subject to the ceiling.
 s=fresh();s.pairExclusions=[];s.months[s.selected].excludedStaffIds=['5','6','7','9'];
 for(const [d,day]of Object.entries(s.months[s.selected].days))day.need={N:0,M:+d<=12?1:0,A:0,R:0,X:0};
 s=arrangedSecondary(s);
 function arrangedSecondary(s){const r=c.solve(s,s.selected,{distribution:true});assert(r.ok,r.message);const next={...s,months:{[s.selected]:r.month}},ts=c.totals(next,s.selected);assert.equal(ts.find(t=>t.id==='8').total,2);assert.equal(ts.slice(0,4).reduce((sum,t)=>sum+t.total,0),10);return next}
 // Impossible typed totals get a specific explanation without changing any cells.
-for(const quotas of [{'1':0,'9':3},{'1':5,'5':6},{'2':3},{'5':23},{'1':20,'8':12}]){
+for(const quotas of [{'1':0,'9':3},{'1':5,'5':6},{'9':10},{'5':23}]){
  s=fresh();s.months[s.selected].quotas=quotas;const before=JSON.stringify(s),r=c.solve(s,s.selected,{distribution:true,ms:1000,nodes:10000});
  assert.equal(r.ok,false);assert.equal(r.reason,'quota');assert(!r.message.includes('ไม่ทันเวลา'));assert.equal(JSON.stringify(s),before);
 }

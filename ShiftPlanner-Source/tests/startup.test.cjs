@@ -211,7 +211,7 @@ console.log('PASS: outreach chat month/date flow, invalid and escaped input, aut
 for(const standalone of [false,true]){
  const live=boot(null,standalone);
  live.run(`selectMonth('2026-11');
- for(const [day,value] of [[1,'N'],[2,'M'],[3,'A'],[5,'R'],[6,'X'],[7,'OFF'],[8,'VAC']]){
+ for(const [day,value] of [[1,'N'],[2,'M'],[4,'A'],[6,'R'],[7,'X'],[9,'OFF'],[10,'VAC']]){
   const next=manualRange(state,state.selected,'1',day,day,value);if(!next.ok)throw Error(next.message);state.months[state.selected]=next.month;
  }changed()`);
  const info=category=>JSON.parse(live.run('JSON.stringify(categoryCountInfo(state,state.selected,"1","'+category+'"))'));
@@ -437,10 +437,10 @@ console.log('PASS: calendar header, assigned-only green box, removed statuses, s
   assert.equal(revised.run('categoryTotals(totals(state,state.selected)[0]).card'),5);assert.equal(revised.run('totals(state,state.selected).find(t=>t.id==="9").X'),2);assert.equal(revised.run('scheduleAudit().complete'),true);
   pending=[{dataset:{quotaId:'9',quotaCategory:'dawn',quotaEdited:'true'},value:''}];await clickAuto();assert.equal(revised.run('activeMonth().categoryQuotas["9"]'),undefined);assert.equal(revised.run('totals(state,state.selected).find(t=>t.id==="9").X'),1);
   // The editable total replaces per-category goals and is read before blur as well.
-  pending=[{dataset:{quotaId:'1',quotaCategory:'total',quotaEdited:'true'},value:'6'}];await clickAuto();
-  assert.equal(revised.run('totals(state,state.selected)[0].total'),6);assert.equal(revised.run('activeMonth().quotas["1"]'),6);assert.equal(revised.run('activeMonth().categoryQuotas["1"]'),undefined);assert.equal(revised.run('categoryCountInfo(state,state.selected,"1","total").hint'),'ครบ');
+  pending=[{dataset:{quotaId:'1',quotaCategory:'total',quotaEdited:'true'},value:'10'}];await clickAuto();
+  assert.equal(revised.run('totals(state,state.selected)[0].total'),10);assert.equal(revised.run('activeMonth().quotas["1"]'),10);assert.equal(revised.run('activeMonth().categoryQuotas["1"]'),undefined);assert.equal(revised.run('categoryCountInfo(state,state.selected,"1","total").hint'),'ครบ');
   pending=[{dataset:{quotaId:'1',quotaCategory:'total',quotaEdited:'true'},value:'0'},{dataset:{quotaId:'9',quotaCategory:'total',quotaEdited:'true'},value:'3'}];await clickAuto();
-  assert.equal(revised.run('totals(state,state.selected)[0].total'),6,'conflicting goals cannot replace the existing schedule');assert(revised.element('modalBody').innerHTML.includes('นวก. ไม่เกินตัวหลักทุกคน'));
+  assert.equal(revised.run('totals(state,state.selected)[0].total'),10,'conflicting goals cannot replace the existing schedule');assert(revised.element('modalBody').innerHTML.includes('นวก. ไม่เกินตัวหลักทุกคน'));
   pending=[{dataset:{quotaId:'1',quotaCategory:'total',quotaEdited:'true'},value:''}];await clickAuto();
   assert.equal(revised.run('activeMonth().quotas["1"]'),undefined);assert(revised.run('totals(state,state.selected)[0].total')>0);assert.equal(revised.run('totals(state,state.selected)[8].X'),3);assert.equal(revised.run('scheduleAudit().complete'),true);
   const totalReloaded=boot(JSON.parse(revised.stored()),standalone);assert.equal(totalReloaded.run('activeMonth().quotas["9"]'),3);assert.equal(totalReloaded.run('categoryCountInfo(state,state.selected,"9","total").value'),3);
@@ -453,7 +453,7 @@ console.log('PASS: calendar header, assigned-only green box, removed statuses, s
  console.log('PASS: real second/third scheduling after uncommitted typed quotas, exact card/dawn targets, changed automatic shares, clearing and atomic invalid/impossible handling in source/standalone');
  for(const standalone of [false,true]){
   const calendar=boot(null,standalone);
-  calendar.run('selectMonth("2026-11");for(const d of [2,3,4,5,6,9,10])activeMonth().days[d].holiday=true;for(const d of [2,3,4,5,6,9,10,11,12])activeMonth().cells["9|"+d]={code:"X",block:"",locked:true};activeMonth().cells["1|21"]={code:"",block:"OFF",locked:false};changed();var reference=solve(state,state.selected,{distribution:true,calendar:true});if(!reference.ok)throw Error(reference.message);var desired=totals({...state,months:{[state.selected]:reference.month}},state.selected).map(t=>({id:t.id,...categoryTotals(t)}))');
+  calendar.run('selectMonth("2026-11");for(const d of [2,3,4,5,6,9,10])activeMonth().days[d].holiday=true;for(const d of [2,3,5,6,9,10,12,13,16])activeMonth().cells["9|"+d]={code:"X",block:"",locked:true};activeMonth().cells["1|21"]={code:"",block:"OFF",locked:false};changed();var reference=solve(state,state.selected,{distribution:true,calendar:true});if(!reference.ok)throw Error(reference.message);var desired=totals({...state,months:{[state.selected]:reference.month}},state.selected).map(t=>({id:t.id,...categoryTotals(t)}))');
   const pending=JSON.parse(calendar.run('JSON.stringify(desired)')).flatMap(p=>['card','dawn'].map(category=>({dataset:{quotaId:p.id,quotaCategory:category,quotaEdited:'true'},value:String(p[category])})));
   calendar.ctx.document.querySelectorAll=selector=>selector==='[data-quota-id]'?pending:[];
   calendar.run('var pendingCalendar=autoSchedule()');calendar.flushTimers();await calendar.run('pendingCalendar');
@@ -463,4 +463,15 @@ console.log('PASS: calendar header, assigned-only green box, removed statuses, s
   assert.equal(calendar.run('cell(activeMonth(),"1",21).block'),'OFF');assert.equal(calendar.run('activeMonth().autoCapacity'),undefined);
  }
  console.log('PASS: real automatic button accepts 122 category targets from special holidays plus manual outreach in source/standalone');
+ for(const standalone of [false,true]){
+  const consecutive=boot(null,standalone);
+  consecutive.run('selectMonth("2026-11");activeMonth().cells={"2|1":{code:"N",block:"",locked:true},"2|2":{code:"N",block:"",locked:true}};changed();cellModal(1,3);choice="A";$("lockCell").checked=true');
+  const before=consecutive.run('JSON.stringify(state)'),history=consecutive.run('history.length');
+  consecutive.run('saveCell()');assert.equal(consecutive.run('JSON.stringify(state)'),before);assert.equal(consecutive.run('history.length'),history);assert(consecutive.element('toast').textContent.includes('ติดกันเกิน 2 วัน'));
+  consecutive.run('closeModal();activeMonth().cells["2|3"]={code:"A",block:"",locked:true};changed();issuesModal()');assert(consecutive.element('modalBody').innerHTML.includes('ติดกันเกิน 2 วัน'));
+  const saved=consecutive.run('JSON.stringify(state)');consecutive.run('closeModal();var pendingConsecutive=autoSchedule()');consecutive.flushTimers();await consecutive.run('pendingConsecutive');
+  assert.equal(consecutive.run('JSON.stringify(state)'),saved);assert(consecutive.element('modalBody').innerHTML.includes('เวรห้องบัตรที่ล็อกไว้ติดกันเกิน 2 วัน'));
+  consecutive.run('closeModal();cellModal(1,2);choice="OFF";saveCell()');assert.equal(consecutive.run('cell(activeMonth(),"2",2).block'),'OFF');assert(!consecutive.run('scheduleAudit().issues.some(i=>i.type==="consecutive")'));
+ }
+ console.log('PASS: third mixed duty rejected atomically in cell editor, stored violations shown, locked automatic failure preserves data, OFF breaks the run in source/standalone');
 })().catch(error=>{console.error(error);process.exitCode=1});

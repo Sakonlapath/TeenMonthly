@@ -4,16 +4,16 @@ const month='2026-11',fresh=()=>({...c.clone(seed),selected:month,months:{[month
 const put=(s,id,d,code,locked=true,m=month)=>s.months[m].cells[c.key(id,d)]={code,block:'',locked};
 for(const p of seed.people){
  const s=fresh();
- assert.equal(c.manualRange(s,month,p.id,2,2,'N').ok,['2','3','4','5'].includes(p.id));
+ assert.equal(c.manualRange(s,month,p.id,2,2,'N').ok,p.id!=='9');
  assert.equal(c.manualRange(s,month,p.id,1,1,'N').ok,p.id!=='9','Sunday nights remain available except outreach-only staff');
  assert.equal(c.manualRange(s,month,p.id,7,7,'N').ok,p.id!=='9','Saturday nights remain available except outreach-only staff');
  s.months[month].days[2].holiday=true;
- assert.equal(c.manualRange(s,month,p.id,2,2,'N').ok,['2','3','4','5'].includes(p.id),'weekday holidays still use weekday night rule');
+ assert.equal(c.manualRange(s,month,p.id,2,2,'N').ok,p.id!=='9','weekday holidays allow all card staff');
 }
-let s=fresh();put(s,'6',2,'N');let before=JSON.stringify(s);
+let s=fresh();s.people.find(p=>p.id==='6').allowed=['M','A','R','X'];put(s,'6',2,'N');let before=JSON.stringify(s);
 assert(c.audit(s,month).issues.some(i=>i.type==='eligibility'&&i.p==='6'));
 assert.equal(c.solve(s,month).reason,'fixed');assert.equal(JSON.stringify(s),before);
-s=fresh();before=JSON.stringify(s);assert(!c.manualRange(s,month,'6',1,2,'N').ok);assert.equal(JSON.stringify(s),before,'reject whole drag if one weekday is ineligible');
+s=fresh();s.people.find(p=>p.id==='6').allowed=['M','A','R','X'];before=JSON.stringify(s);assert(!c.manualRange(s,month,'6',1,2,'N').ok);assert.equal(JSON.stringify(s),before,'reject whole drag if one weekday is ineligible');
 for(const early of ['N','R','X']){
  s=fresh();put(s,'2',2,'A');before=JSON.stringify(s);assert(!c.manualRange(s,month,'2',3,3,early).ok);assert.equal(JSON.stringify(s),before);
  s=fresh();put(s,'2',3,early);assert(!c.manualRange(s,month,'2',2,2,'A').ok,'validate next day too');
@@ -25,7 +25,7 @@ for(const early of ['N','R','X']){
  assert(!c.manualRange(s,month,'2',30,30,'A').ok,'next month boundary');
  put(s,'2',30,'A');assert(c.audit(s,month).issues.some(i=>i.type==='rest'&&i.d===30));assert.equal(c.solve(s,month).reason,'fixed');
 }
-console.log('PASS: weekday night whitelist, weekend/holiday behavior, atomic painting, both rest directions and adjacent months');
+console.log('PASS: night permissions for every card staff member, weekend/holiday behavior, atomic painting, both rest directions and adjacent months');
 function shortRoster(){const s=fresh();s.people=s.people.slice(0,8);for(const[d,day]of Object.entries(s.months[month].days))day.need=+d<=8?{N:1,M:0,A:1,R:1,X:1}:{N:0,M:0,A:0,R:0,X:0};return s}
 s=shortRoster();s.months[month].categoryQuotas=Object.fromEntries(s.people.map(p=>[p.id,{card:2,dawn:1,outreach:1}]));
 before=JSON.stringify(s);let result=c.solve(s,month,{ms:10000});assert(result.ok,result.message);assert.equal(JSON.stringify(s),before);
@@ -33,7 +33,7 @@ s.months[month]=result.month;assert(c.audit(s,month).complete);
 for(const t of c.totals(s,month))assert.deepEqual(c.categoryTotals(t),{card:2,dawn:2});
 for(const p of s.people)for(let d=1;d<=30;d++){
  const code=c.cell(result.month,p.id,d).code;
- if(code==='N'&&![0,6].includes(c.weekday(month,d)))assert(['2','3','4','5'].includes(p.id));
+ if(code==='N'&&![0,6].includes(c.weekday(month,d)))assert(p.id!=='9');
  if(d>1)assert(!c.restConflict(c.cell(result.month,p.id,d-1).code,code));
 }
 result=c.solve(s,month,{ms:10000});assert(result.ok,result.message);assert(c.audit({...s,months:{[month]:result.month}},month).complete);
