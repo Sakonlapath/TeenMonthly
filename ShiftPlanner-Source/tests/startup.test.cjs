@@ -3,14 +3,25 @@ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),asse
 function boot(saved=null,standalone=false){
 const elements=new Map();
 const element=id=>{if(!elements.has(id)){const classes=new Set();elements.set(id,{innerHTML:'',value:'',textContent:'',classList:{toggle(name,on){if(on===undefined)on=!classes.has(name);if(on)classes.add(name);else classes.delete(name)},add(name){classes.add(name)},remove(name){classes.delete(name)},contains:name=>classes.has(name)},setAttribute(){},addEventListener(){},querySelectorAll(){return[]},querySelector(){return null},showModal(){this.open=true},close(){this.open=false}})}return elements.get(id)};
-let stored=saved?JSON.stringify(saved):null;
+let stored=saved?JSON.stringify(saved):null;const otherStores=new Map();
 const timers=new Map();let timerId=0;
-const ctx=vm.createContext({console,TextEncoder,document:{getElementById:element,querySelectorAll:()=>[],addEventListener(){}},localStorage:{getItem:()=>stored,setItem(key,value){stored=value}},setTimeout(callback){timers.set(++timerId,callback);return timerId},clearTimeout(id){timers.delete(id)},cancelAnimationFrame(){}});
+const ctx=vm.createContext({console,TextEncoder,document:{getElementById:element,querySelectorAll:()=>[],addEventListener(){}},localStorage:{getItem:key=>key==='card-room-planner-v1'?stored:otherStores.get(key)??null,setItem(key,value){if(key==='card-room-planner-v1')stored=value;else otherStores.set(key,value)}},setTimeout(callback){timers.set(++timerId,callback);return timerId},clearTimeout(id){timers.delete(id)},cancelAnimationFrame(){}});
 const run=x=>vm.runInContext(x,ctx);
 ctx.window={addEventListener(){}};
 if(standalone){const html=fs.readFileSync(path.join(__dirname,'../ShiftPlanner-Standalone.html'),'utf8');for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))run(match[1])}
-else for(const file of ['core','data','export-template','exports','app','help-chat','editor'])run(fs.readFileSync(path.join(__dirname,'../js/'+file+'.js'),'utf8'));
+else for(const file of ['core','data','export-template','exports','app','help-chat','editor','code-catalog','code-library'])run(fs.readFileSync(path.join(__dirname,'../js/'+file+'.js'),'utf8'));
 return{ctx,run,element,stored:()=>stored,flushTimers(){for(const[id,callback]of [...timers]){timers.delete(id);callback()}}};
+}
+for(const standalone of [false,true]){
+ const codes=boot(null,standalone);codes.run('view("codes")');
+ assert(codes.element('codesView').innerHTML.includes('คลังโค้ดรหัส'));
+ assert(codes.element('codeResults').innerHTML.includes('เพิ่มรหัสแรก'));
+ assert(codes.element('codesView').innerHTML.includes('kitty-character-arm'));
+ assert(!codes.element('codesView').innerHTML.includes('onclick="CodeLibrary.cloud()"'));
+ assert(codes.element('scheduleView').classList.contains('hidden'));
+ assert(codes.element('navCodes').classList.contains('active'));
+ codes.run('view("schedule")');assert(codes.element('codesView').classList.contains('hidden'));
+ assert(!codes.element('scheduleView').classList.contains('hidden'));
 }
 const {ctx,run,element}=boot();
 assert.equal(run('Object.keys(activeMonth().cells).length'),0);

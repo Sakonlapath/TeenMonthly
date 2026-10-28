@@ -30,7 +30,7 @@ function normalizeCalendarState(s){let changed=false;for(const month of Object.k
 function changed(){normalizeCalendarState(state);save();render()}
 function undo(){if(!history.length)return;state=history.pop();changed();toast('ย้อนการแก้ไขแล้ว')}
 function toast(s){$('toast').textContent=s;$('toast').classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),4500)}
-function view(v){currentView=v;$('scheduleView').classList.toggle('hidden',v!=='schedule');$('summaryView').classList.toggle('hidden',v!=='summary');$('navSchedule').classList.toggle('active',v==='schedule');$('navSummary').classList.toggle('active',v==='summary')}
+function view(v){if(typeof cancelPaint==='function')cancelPaint();currentView=v;for(const [name,id]of [['schedule','Schedule'],['summary','Summary'],['codes','Codes']]){const section=$(name==='codes'?'codesView':name+'View'),button=$('nav'+id);if(section)section.classList.toggle('hidden',v!==name);if(button)button.classList.toggle('active',v===name)}if(v==='codes'&&typeof CodeLibrary!=='undefined')CodeLibrary.render()}
 function selectMonth(m){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)||+m.slice(0,4)<1900||+m.slice(0,4)>2200){toast('เลือกปี ค.ศ. 1900–2200');return}if(typeof cancelPaint==='function')cancelPaint();state.selected=m;if(!state.months[m])state.months[m]=freshMonth(m);changed()}
 function changeMonth(off){selectMonth(monthOffset(state.selected,off))}
 function categoryCountInfo(s,month,id,category){
