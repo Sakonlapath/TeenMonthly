@@ -34,7 +34,16 @@ s=fresh();s.months[s.selected].categoryQuotas={'5':{card:22}};const overlong=c.s
 s=fresh();s.pairExclusions=[];s.months[s.selected].excludedStaffIds=['5','6','7','9'];
 for(const [d,day]of Object.entries(s.months[s.selected].days))day.need={N:0,M:+d<=12?1:0,A:0,R:0,X:0};
 s=arrangedSecondary(s);
-function arrangedSecondary(s){const r=c.solve(s,s.selected,{distribution:true});assert(r.ok,r.message);const next={...s,months:{[s.selected]:r.month}},ts=c.totals(next,s.selected);assert.equal(ts.find(t=>t.id==='8').total,2);assert.equal(ts.slice(0,4).reduce((sum,t)=>sum+t.total,0),10);return next}
+function arrangedSecondary(s){
+ const r=c.solve(s,s.selected,{distribution:true});assert(r.ok,r.message);
+ const next={...s,months:{[s.selected]:r.month}},ts=c.totals(next,s.selected),secondary=ts.find(t=>t.id==='8');
+ assert(c.audit(next,s.selected).complete);
+ assert.equal(ts.reduce((sum,t)=>sum+t.total,0),12);
+ assert(secondary.total<=2,'secondary staff receive fewer shifts before the main group');
+ assert(ts.slice(0,4).every(t=>c.totalPay(next,t)>c.totalPay(next,secondary)),'Rapeephan has the lowest income');
+ assert(Math.abs(secondary.total-ts[0].total)<=2,'secondary and medical records workloads stay close');
+ return next;
+}
 // Impossible typed totals get a specific explanation without changing any cells.
 for(const quotas of [{'1':0,'9':3},{'1':5,'5':6},{'9':10},{'5':23}]){
  s=fresh();s.months[s.selected].quotas=quotas;const before=JSON.stringify(s),r=c.solve(s,s.selected,{distribution:true,ms:1000,nodes:10000});

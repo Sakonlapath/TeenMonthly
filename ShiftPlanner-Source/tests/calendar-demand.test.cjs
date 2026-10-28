@@ -17,7 +17,7 @@ for(const [month,regular,holidays,card]of [['2026-10',22,9,80],['2026-11',21,9,7
 let s=fresh('2026-11'),month=s.selected,m=s.months[month];
 m.autoCapacity=Object.fromEntries(Object.entries(m.days).map(([day,item])=>[day,c.clone(item.need)]));
 for(const day of [2,3,4,5,6,9,10])m.days[day].holiday=true;
-for(const day of [2,3,4,5,6,9,10,11,12])m.cells['9|'+day]={code:'X',block:'',locked:true};
+for(const day of [2,4,6,10,12,16,18,20,24])m.cells['9|'+day]={code:'X',block:'',locked:true};
 m.cells['1|21']={code:'',block:'OFF',locked:false};m.cells['3|15']={code:'',block:'VAC',locked:false};
 const original=JSON.stringify(s),demand=c.calendarDemand(s,month);assert.deepEqual([demand.card,demand.R,demand.X,demand.total],[92,21,9,122]);
 const first=c.solve(s,month,{calendar:true,distribution:true,ms:3000});assert(first.ok,first.message);assert.equal(JSON.stringify(s),original);

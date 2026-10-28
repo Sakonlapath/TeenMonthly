@@ -22,7 +22,7 @@ assert(!element('summaryTable').innerHTML.includes('เป้ารวม 4 เ�
 run('onQuotaChange("3","1.5")');assert.equal(run('activeMonth().quotas["3"]'),4);
 run('onQuotaInput({value:"15"},"3")');assert.equal(element('categoryTotal-card').textContent,0,'typing a goal cannot change the assigned count');
 run('onQuotaChange("2","15");onQuotaChange("3","15");onQuotaChange("4","15");onQuotaChange("1","9");onQuotaChange("5","5");onQuotaChange("6","5");onQuotaChange("7","6");onQuotaChange("8","8")');
-assert(element('categoryTotals').innerHTML.includes('id="calendarCardTotal" aria-live="polite">78</strong>'));assert(!element('categoryTotals').innerHTML.includes('quotaTotal'));
+assert(element('categoryTotals').innerHTML.includes('id="calendarTotal" aria-live="polite">99</strong>'));assert(!element('categoryTotals').innerHTML.includes('quotaTotal'));
 const index=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');assert.equal((index.match(/id="autoBtn"/g)||[]).length,1);assert(index.indexOf('id="autoBtn"')>index.indexOf('id="scheduleView"'));
 assert(element('scheduleTable').innerHTML.includes('data-quota-id="3"'));
 assert(!element('scheduleTable').innerHTML.includes('<tfoot>'));
@@ -211,7 +211,7 @@ console.log('PASS: outreach chat month/date flow, invalid and escaped input, aut
 for(const standalone of [false,true]){
  const live=boot(null,standalone);
  live.run(`selectMonth('2026-11');
- for(const [day,value] of [[1,'N'],[2,'M'],[4,'A'],[6,'R'],[7,'X'],[9,'OFF'],[10,'VAC']]){
+ for(const [day,value] of [[1,'N'],[2,'M'],[4,'A'],[6,'R'],[8,'X'],[9,'OFF'],[10,'VAC']]){
   const next=manualRange(state,state.selected,'1',day,day,value);if(!next.ok)throw Error(next.message);state.months[state.selected]=next.month;
  }changed()`);
  const info=category=>JSON.parse(live.run('JSON.stringify(categoryCountInfo(state,state.selected,"1","'+category+'"))'));
@@ -385,22 +385,60 @@ for(const standalone of [false,true]){
 console.log('PASS: combined early demand, per-person recommendations, eligible divisor, escaped names and empty roster in source/standalone');
 for(const standalone of [false,true]){
  const calendar=boot(null,standalone);calendar.run('selectMonth("2026-11")');
- assert(calendar.element('categoryTotals').innerHTML.includes('id="calendarCardTotal" aria-live="polite">78</strong>'));
+ assert(calendar.element('categoryTotals').innerHTML.includes('id="calendarTotal" aria-live="polite">99</strong>'));
  assert(calendar.element('categoryTotals').innerHTML.includes('<span>ลงแล้ว</span>'));assert(!calendar.element('scheduleTable').innerHTML.includes('quota-status'));assert(!calendar.element('summaryTable').innerHTML.includes('quota-status'));
  calendar.run('dayModal(2)');assert(calendar.element('modalBody').innerHTML.includes('readonly aria-readonly="true"'));
  calendar.run('for(const code of CODES)$("need"+code).value=activeMonth().days[2].need[code];$("dayHoliday").checked=true;$("dayNote").value="วันหยุดพิเศษ";holidayPreset(2);saveDay()');
  assert.equal(calendar.run('calendarDemand(state,state.selected).card'),80);assert.equal(calendar.run('activeMonth().days[2].need.M'),2);
- assert(calendar.element('categoryTotals').innerHTML.includes('20 วัน × 2 + 10 วัน × 4'));
- calendar.run('calendarDemandModal()');assert(calendar.element('modalBody').innerHTML.includes('ห้องบัตรทั้งหมด 80'));assert(calendar.element('modalBody').innerHTML.includes('รุ่งอรุณแสดงแยก'));
+ assert(calendar.element('categoryTotals').innerHTML.includes('ห้องบัตร 80 + รุ่งอรุณ 21'));
+ calendar.run('calendarDemandModal()');assert(calendar.element('modalBody').innerHTML.includes('ห้องบัตรทั้งหมด 80'));assert(calendar.element('modalBody').innerHTML.includes('รุ่งอรุณทั้งหมด'));
  const reloaded=boot(JSON.parse(calendar.stored()),standalone);assert.equal(reloaded.run('calendarDemand(state,state.selected).card'),80);
  calendar.run('closeModal();undo()');assert.equal(calendar.run('calendarDemand(state,state.selected).card'),78);
  calendar.run('cellModal(8,2);choice="X";$("lockCell").checked=false;saveCell()');assert.equal(calendar.run('activeMonth().days[2].need.X'),1,'manual outreach opens its date even when the person can be reassigned');
  assert.equal(calendar.run('calendarDemand(state,state.selected).card'),78);assert.equal(calendar.run('calendarDemand(state,state.selected).dawn'),22);
  calendar.run('activeMonth().cells["1|3"]={code:"",block:"OFF",locked:false};activeMonth().cells["3|4"]={code:"",block:"VAC",locked:false};changed()');assert.equal(calendar.run('calendarDemand(state,state.selected).card'),78);
  calendar.run('onQuotaInput({value:"20"},"1","card")');assert.equal(calendar.element('categoryTotal-card').textContent,0,'typed targets do not inflate the assigned box');
+ calendar.run('checkpoint();for(const[d,day]of Object.entries(activeMonth().days))day.need.X=+d<=14?1:0;changed()');
+ assert(calendar.element('categoryTotals').innerHTML.includes('id="calendarTotal" aria-live="polite">113</strong>'),'78 card + 21 KIOS + 14 outreach = 113 total shifts');
+ assert(calendar.element('categoryTotals').innerHTML.includes('ห้องบัตร 78 + รุ่งอรุณ 35'));
+ calendar.run('calendarDemandModal()');assert(calendar.element('modalBody').innerHTML.includes('เวรทั้งหมด 113 เวร'));assert(calendar.element('modalBody').innerHTML.includes('หน้าตู้KIOS 21 + รพ.สต. 14'));
+ const combinedReload=boot(JSON.parse(calendar.stored()),standalone);assert(combinedReload.element('categoryTotals').innerHTML.includes('id="calendarTotal" aria-live="polite">113</strong>'));
+ calendar.run('closeModal();undo()');assert(calendar.element('categoryTotals').innerHTML.includes('id="calendarTotal" aria-live="polite">100</strong>'));
 }
 console.log('PASS: calendar header, assigned-only green box, removed statuses, special-holiday update/undo/persistence, manual outreach and unchanged demand for personal leave');
 (async()=>{
+ for(const standalone of [false,true]){
+  const reset=boot(null,standalone);
+  const clickAuto=async(options='')=>{reset.run('var pendingReset=autoSchedule('+options+')');reset.flushTimers();await reset.run('pendingReset')};
+  reset.run('selectMonth("2026-11");for(let d=1;d<=14;d++)activeMonth().days[d].need.X=1;activeMonth().cells={"9|2":{code:"X",block:"",locked:true},"3|3":{code:"",block:"OFF",locked:false},"4|4":{code:"",block:"VAC",locked:false}};for(const p of state.people)setTotalTarget(state,p.id,"0");changed()');
+  const zeroState=reset.run('JSON.stringify(state)'),days=reset.run('JSON.stringify(activeMonth().days)'),otherMonth=reset.run('JSON.stringify(state.months["2026-10"])');
+  await clickAuto();assert.equal(reset.run('JSON.stringify(state)'),zeroState);assert(reset.element('modalFoot').innerHTML.includes('ล้างเป้ารายคน แล้วจัดใหม่'));
+  assert(reset.element('modalBody').innerHTML.includes('เลข 0 ที่กรอกเป็นเป้า'));
+  const history=reset.run('history.length');await clickAuto('{resetTargets:true}');
+  assert.equal(reset.run('scheduleAudit().complete'),true);assert.equal(reset.run('totals(state,state.selected).reduce((sum,t)=>sum+t.total,0)'),113);
+  assert.equal(reset.run('JSON.stringify(activeMonth().quotas)'),'{}');assert.equal(reset.run('JSON.stringify(activeMonth().categoryQuotas)'),'{}');
+  assert.equal(reset.run('JSON.stringify(activeMonth().days)'),days);assert.equal(reset.run('JSON.stringify(state.months["2026-10"])'),otherMonth);
+  assert.equal(reset.run('cell(activeMonth(),"9",2).locked'),true);assert.equal(reset.run('cell(activeMonth(),"3",3).block'),'OFF');assert.equal(reset.run('cell(activeMonth(),"4",4).block'),'VAC');
+  assert.equal(reset.run('history.length'),history+1);reset.run('undo()');assert.equal(reset.run('JSON.stringify(state)'),zeroState,'clear targets and replan is one undoable operation');
+  const dirty={dataset:{quotaId:'1',quotaCategory:'total',quotaEdited:'true'},value:'0'};reset.ctx.document.querySelectorAll=selector=>selector==='[data-quota-id]'?[dirty]:[];
+  reset.run('clearModal()');assert(reset.element('modalBody').innerHTML.includes('id="keepTargets"'));assert(!reset.element('modalBody').innerHTML.includes('checked'));
+  reset.run('clearMonth(false)');assert.equal(dirty.dataset.quotaEdited,'false');assert.equal(reset.run('JSON.stringify(activeMonth().quotas)'),'{}');assert.equal(reset.run('cell(activeMonth(),"9",2).code'),'');
+  assert.equal(reset.run('cell(activeMonth(),"3",3).block'),'OFF');assert.equal(reset.run('cell(activeMonth(),"4",4).block'),'VAC');assert.equal(reset.run('JSON.stringify(activeMonth().days)'),days);
+  const reloaded=boot(JSON.parse(reset.stored()),standalone);assert.equal(reloaded.run('JSON.stringify(activeMonth().quotas)'),'{}');
+  await clickAuto();assert.equal(reset.run('scheduleAudit().complete'),true);assert.equal(reset.run('totals(state,state.selected).reduce((sum,t)=>sum+t.total,0)'),113);
+  // Clearing everything also resets category/legacy targets, but preserves other
+  // months, holidays and opened dawn dates. Keeping targets remains an explicit option.
+  reset.ctx.document.querySelectorAll=()=>[];
+  reset.run('for(const p of state.people)for(const g of SHIFT_GROUPS)setCategoryTarget(state,p.id,g.id,"0");state.quotas={"1":0};delete activeMonth().quotas;activeMonth().days[2].holiday=true;changed()');
+  const categories=reset.run('JSON.stringify(activeMonth().categoryQuotas)'),beforeClear=reset.run('JSON.stringify(state)');
+  reset.run('clearMonth(true,true)');assert.equal(reset.run('JSON.stringify(activeMonth().categoryQuotas)'),categories);reset.run('undo()');assert.equal(reset.run('JSON.stringify(state)'),beforeClear);
+  reset.run('clearMonth(true)');assert.equal(reset.run('Object.keys(activeMonth().cells).length'),0);assert.equal(reset.run('JSON.stringify(activeMonth().quotas)'),'{}');assert.equal(reset.run('JSON.stringify(activeMonth().categoryQuotas)'),'{}');assert.equal(reset.run('JSON.stringify(state.quotas)'),'{"1":0}');assert.equal(reset.run('activeMonth().days[2].holiday'),true);
+  await clickAuto();assert.equal(reset.run('scheduleAudit().complete'),true);assert.equal(reset.run('totals(state,state.selected).reduce((sum,t)=>sum+t.total,0)'),115);
+  reset.run('setTotalTarget(state,"6","0");changed()');await clickAuto();assert.equal(reset.run('totals(state,state.selected)[5].total'),0,'an individual zero remains an exact target during normal scheduling');
+  reset.run('for(const p of state.people)if(p.id!=="9")activeMonth().cells[p.id+"|1"]={code:"",block:"OFF",locked:false};changed()');
+  const impossible=reset.run('JSON.stringify(state)'),beforeHistory=reset.run('history.length');await clickAuto('{resetTargets:true}');assert.equal(reset.run('JSON.stringify(state)'),impossible,'failure while resetting targets is atomic');assert.equal(reset.run('history.length'),beforeHistory);
+ }
+ console.log('PASS: clear zero targets and replan 113 shifts, optional target retention, legacy shadowing, pending input, preserved days/leave/locks, persistence, one-step undo, explicit zero and atomic failure in source/standalone');
  for(const standalone of [false,true]){
   const distributed=boot(null,standalone);
   distributed.run('selectMonth("2026-10");var pendingDistribution=autoSchedule()');distributed.flushTimers();await distributed.run('pendingDistribution');
@@ -412,9 +450,16 @@ console.log('PASS: calendar header, assigned-only green box, removed statuses, s
   assert.equal(distributed.run('totals(state,state.selected).every(t=>t.X>=1)'),true);
   assert.equal(distributed.run('totals(state,state.selected).filter(t=>t.id!=="9").every(t=>t.R===2||t.R===3)'),true);
   assert.equal(distributed.run('totals(state,state.selected).find(t=>t.id==="9").R'),0);
+  assert.equal(distributed.run('var earnings=totals(state,state.selected).slice(0,8).map(t=>totalPay(state,t));Math.min(...earnings.slice(1,4))>earnings[0]&&earnings[0]>Math.max(...earnings.slice(4,7))&&Math.min(...earnings.slice(4,7))>earnings[7]'),true,'the real button follows the income order');
+  assert.equal(distributed.run('var academicLoads=totals(state,state.selected).slice(4,7).map(t=>t.total);Math.max(...academicLoads)-Math.min(...academicLoads)<=1'),true);
+  assert(distributed.element('fairnessDetail').innerHTML.includes('ตัวหลัก 2–4 สูงสุด → เวชสถิติ → นวก. → รพีพรรณ'));
   assert(distributed.element('fairnessDetail').innerHTML.includes('22 เวร ÷ 8 คน = คนละ 2–3 เวร'));
   assert.equal(JSON.parse(distributed.stored()).months['2026-10'].distributionRules,true);
   const reloaded=boot(JSON.parse(distributed.stored()),standalone);assert.equal(reloaded.run('scheduleAudit().complete'),true);
+  distributed.run('var previousLayout=JSON.stringify(totals(state,state.selected));var previousCodes=state.people.map(p=>Array.from({length:daysIn(state.selected)},(_,d)=>cell(activeMonth(),p.id,d+1).code).join(",")).join("|");pendingDistribution=autoSchedule()');distributed.flushTimers();await distributed.run('pendingDistribution');
+  assert.equal(distributed.run('scheduleAudit().complete'),true);
+  assert.equal(distributed.run('JSON.stringify(totals(state,state.selected))===previousLayout'),true,'repeat button keeps pay and per-code totals');
+  assert.equal(distributed.run('state.people.map(p=>Array.from({length:daysIn(state.selected)},(_,d)=>cell(activeMonth(),p.id,d+1).code).join(",")).join("|")!==previousCodes'),true,'repeat button produces a different layout');
   distributed.run('for(let d=1;d<=20;d++)activeMonth().cells["3|"+d]={code:"",block:d%2?"OFF":"VAC",locked:false};changed();pendingDistribution=autoSchedule()');distributed.flushTimers();await distributed.run('pendingDistribution');
   assert.equal(distributed.run('scheduleAudit().complete'),true);
   assert.equal(distributed.run('JSON.stringify(totals(state,state.selected).filter(t=>["2","3","4"].includes(t.id)).map(t=>t.R))'),'[3,3,3]');
@@ -453,16 +498,26 @@ console.log('PASS: calendar header, assigned-only green box, removed statuses, s
  console.log('PASS: real second/third scheduling after uncommitted typed quotas, exact card/dawn targets, changed automatic shares, clearing and atomic invalid/impossible handling in source/standalone');
  for(const standalone of [false,true]){
   const calendar=boot(null,standalone);
-  calendar.run('selectMonth("2026-11");for(const d of [2,3,4,5,6,9,10])activeMonth().days[d].holiday=true;for(const d of [2,3,5,6,9,10,12,13,16])activeMonth().cells["9|"+d]={code:"X",block:"",locked:true};activeMonth().cells["1|21"]={code:"",block:"OFF",locked:false};changed();var reference=solve(state,state.selected,{distribution:true,calendar:true});if(!reference.ok)throw Error(reference.message);var desired=totals({...state,months:{[state.selected]:reference.month}},state.selected).map(t=>({id:t.id,...categoryTotals(t)}))');
+  calendar.run('selectMonth("2026-11");for(const d of [2,3,4,5,6,9,10])activeMonth().days[d].holiday=true;for(const d of [2,4,6,10,12,16,18,20,24])activeMonth().cells["9|"+d]={code:"X",block:"",locked:true};activeMonth().cells["1|21"]={code:"",block:"OFF",locked:false};changed();var reference=solve(state,state.selected,{distribution:true,calendar:true});if(!reference.ok)throw Error(reference.message);var desired=totals({...state,months:{[state.selected]:reference.month}},state.selected).map(t=>({id:t.id,...categoryTotals(t)}))');
   const pending=JSON.parse(calendar.run('JSON.stringify(desired)')).flatMap(p=>['card','dawn'].map(category=>({dataset:{quotaId:p.id,quotaCategory:category,quotaEdited:'true'},value:String(p[category])})));
   calendar.ctx.document.querySelectorAll=selector=>selector==='[data-quota-id]'?pending:[];
   calendar.run('var pendingCalendar=autoSchedule()');calendar.flushTimers();await calendar.run('pendingCalendar');
   assert.equal(calendar.run('scheduleAudit().complete'),true);assert.equal(calendar.run('totals(state,state.selected).reduce((sum,t)=>sum+t.total,0)'),122);
-  assert(calendar.element('categoryTotals').innerHTML.includes('id="calendarCardTotal" aria-live="polite">92</strong>'));
+  assert(calendar.element('categoryTotals').innerHTML.includes('id="calendarTotal" aria-live="polite">122</strong>'));
   assert.equal(calendar.run('totals(state,state.selected).reduce((sum,t)=>sum+categoryTotals(t).card,0)'),92);assert.equal(calendar.run('totals(state,state.selected).reduce((sum,t)=>sum+categoryTotals(t).dawn,0)'),30);
   assert.equal(calendar.run('cell(activeMonth(),"1",21).block'),'OFF');assert.equal(calendar.run('activeMonth().autoCapacity'),undefined);
  }
  console.log('PASS: real automatic button accepts 122 category targets from special holidays plus manual outreach in source/standalone');
+ for(const standalone of [false,true]){
+  const dawn=boot(null,standalone);
+  dawn.run('selectMonth("2026-11");activeMonth().cells={"2|6":{code:"R",block:"",locked:true}};changed();cellModal(1,7);choice="X";$("lockCell").checked=true');
+  const before=dawn.run('JSON.stringify(state)'),history=dawn.run('history.length');
+  dawn.run('saveCell()');assert.equal(dawn.run('JSON.stringify(state)'),before);assert.equal(dawn.run('history.length'),history);assert(dawn.element('toast').textContent.includes('รุ่งอรุณติดกัน'));
+  dawn.run('closeModal();activeMonth().cells["2|7"]={code:"X",block:"",locked:true};changed();issuesModal()');assert(dawn.element('modalBody').innerHTML.includes('รุ่งอรุณติดกัน'));
+  const saved=dawn.run('JSON.stringify(state)');dawn.run('closeModal();var pendingDawn=autoSchedule()');dawn.flushTimers();await dawn.run('pendingDawn');
+  assert.equal(dawn.run('JSON.stringify(state)'),saved);assert(dawn.element('modalBody').innerHTML.includes('รุ่งอรุณติดกัน'));
+ }
+ console.log('PASS: mixed-color dawn rejected in cell editor and saved conflicts reported without overwriting locked data in source/standalone');
  for(const standalone of [false,true]){
   const consecutive=boot(null,standalone);
   consecutive.run('selectMonth("2026-11");activeMonth().cells={"2|1":{code:"N",block:"",locked:true},"2|2":{code:"N",block:"",locked:true}};changed();cellModal(1,3);choice="A";$("lockCell").checked=true');

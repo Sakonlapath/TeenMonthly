@@ -40,7 +40,7 @@ assert.equal(c.totals({...s,months:{[s.selected]:result.month}},s.selected).find
 s=redDays(fresh(),dates);s.months[s.selected].categoryQuotas={'6':{card:0,dawn:0}};
 result=c.solve(s,s.selected,{distribution:true});assert(result.ok,result.message);assert.equal(c.totals({...s,months:{[s.selected]:result.month}},s.selected)[5].total,0);
 // Locks are preserved even above the previous blue ceiling; unavailable staff are skipped.
-s=redDays(fresh(),dates);for(const d of [1,2,5,6])s.months[s.selected].cells['1|'+d]={code:'R',block:'',locked:true};
+s=redDays(fresh(),dates);for(const d of [1,5,7,9])s.months[s.selected].cells['1|'+d]={code:'R',block:'',locked:true};
 result=c.solve(s,s.selected,{distribution:true});assert(result.ok,result.message);assert(c.totals({...s,months:{[s.selected]:result.month}},s.selected)[0].R>=4);
 s=redDays(fresh(),dates);for(const d of dates)s.months[s.selected].cells['1|'+d]={code:'',block:'OFF',locked:false};
 const before=JSON.stringify(s);result=c.solve(s,s.selected,{distribution:true});assert(result.ok,result.message);assert.equal(JSON.stringify(s),before);assert.equal(c.totals({...s,months:{[s.selected]:result.month}},s.selected)[0].X,0);

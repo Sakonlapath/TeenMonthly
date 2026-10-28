@@ -22,12 +22,12 @@ s.months[month].categoryQuotas['1'].card=8;s=solveAgain(s);
 assert.deepEqual(c.categoryTotals(c.totals(s,month)[0]),{card:8,dawn:6});
 delete s.months[month].categoryQuotas['1'].dawn;s=solveAgain(s);assert.equal(c.categoryTotals(c.totals(s,month)[0]).card,8);
 // Larger dawn changes also recompute the red/blue split instead of keeping old shares.
-s=arranged(month);s.months[month].categoryQuotas['1']={dawn:15};s=solveAgain(s);assert.equal(c.categoryTotals(c.totals(s,month)[0]).dawn,15);
+s=arranged(month);s.months[month].categoryQuotas['1']={dawn:10};s=solveAgain(s);assert.equal(c.categoryTotals(c.totals(s,month)[0]).dawn,10);
 // Manual locks and absences remain fixed across a quota change.
 s=arranged(month);s.months[month].cells['1|2']={code:'R',block:'',locked:true};s.months[month].cells['3|15']={code:'',block:'OFF',locked:false};s.months[month].cells['4|16']={code:'',block:'VAC',locked:false};s.months[month].categoryQuotas['1']={dawn:3};
 s=solveAgain(s);assert.deepEqual(c.cell(s.months[month],'1',2),{code:'R',block:'',locked:true});assert.equal(c.cell(s.months[month],'3',15).block,'OFF');assert.equal(c.cell(s.months[month],'4',16).block,'VAC');
 // Impossible requests report their actual limit without a timeout or partial changes.
-for(const[id,goal,blocked,max]of [['1',25,0,22],['9',10,0,9],['3',3,29,1]]){
+for(const[id,goal,blocked,max]of [['1',25,0,13],['9',10,0,6],['3',3,29,1]]){
  s=arranged(month);for(let d=1;d<=blocked;d++)s.months[month].cells[id+'|'+d]={code:'',block:'OFF',locked:false};s.months[month].categoryQuotas[id]={dawn:goal};
  const before=JSON.stringify(s),result=c.solve(s,month,{distribution:true});assert.equal(result.ok,false);assert.equal(result.reason,'quota');assert(result.message.includes('สูงสุด '+max));assert.equal(JSON.stringify(s),before);
 }

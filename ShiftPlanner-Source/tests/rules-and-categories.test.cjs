@@ -92,8 +92,8 @@ for(const value of ['N','M','A','R','OFF','VAC']){
  assert(rejected.message.includes('ร สีแดง'));assert.equal(JSON.stringify(s),before);
  assert.equal(c.eligibleOnDay(ninth,month,1,value),false);
 }
-let permitted=c.manualRange(s,month,'9',2,4,'X');assert(permitted.ok,permitted.message);
-for(let d=2;d<=4;d++)assert.deepEqual(c.cell(permitted.month,'9',d),{code:'X',block:'',locked:true});
+let permitted=c.manualRange(s,month,'9',2,2,'X');assert(permitted.ok,permitted.message);
+assert.deepEqual(c.cell(permitted.month,'9',2),{code:'X',block:'',locked:true});
 s.months[month]=permitted.month;assert(c.manualRange(s,month,'9',2,4,'').ok);
 for(const value of ['N','M','A','R','OFF','VAC']){
  s=fresh();s.months[month].cells['9|2']={code:c.CODES.includes(value)?value:'',block:c.CODES.includes(value)?'':value,locked:c.CODES.includes(value)};
@@ -103,12 +103,12 @@ for(const value of ['N','M','A','R','OFF','VAC']){
 s=fresh();s.months[month].categoryQuotas={'9':{card:1}};assert.equal(c.solve(s,month).reason,'quota');
 // A blue-only month must not assign R to person 9 or reserve a blue target for him.
 s=fresh();s.months[month].excludedStaffIds=s.people.filter(p=>!['1','9'].includes(p.id)).map(p=>p.id);
-for(const[d,day]of Object.entries(s.months[month].days))day.need={N:0,M:0,A:0,R:+d<=4?1:0,X:0};
+for(const[d,day]of Object.entries(s.months[month].days))day.need={N:0,M:0,A:0,R:[1,3,5,7].includes(+d)?1:0,X:0};
 assert.equal(c.dawnTargets(s,month)['9'],undefined);
 result=c.solve(s,month);assert(result.ok,result.message);
 assert.equal(c.totals({...s,months:{[month]:result.month}},month).find(t=>t.id==='9').total,0);
 // Red-only slots can all be assigned to him under an exact target.
-for(const[d,day]of Object.entries(s.months[month].days))day.need={N:0,M:0,A:0,R:0,X:+d<=3?1:0};
+for(const[d,day]of Object.entries(s.months[month].days))day.need={N:0,M:0,A:0,R:0,X:[1,3,5].includes(+d)?1:0};
 s.months[month].categoryQuotas={'1':{card:0,dawn:0},'9':{card:0,dawn:3}};
 result=c.solve(s,month);assert(result.ok,result.message);
 assert.equal(c.totals({...s,months:{[month]:result.month}},month).find(t=>t.id==='9').X,3);

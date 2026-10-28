@@ -16,7 +16,7 @@ let s=fresh(),month=s.selected;put(s,month,'2',1,'N');put(s,month,'2',3,'M');let
 assert(!c.manualRange(s,month,'2',2,2,'M').ok);assert(c.manualRange(s,month,'2',2,2,'R').ok,'KIOS separates two card days');assert.equal(JSON.stringify(s),before);
 s=fresh();before=JSON.stringify(s);let r=c.manualRange(s,month,'2',2,4,'M');assert.equal(r.ok,false);assert(r.message.includes('ติดกันเกิน 2 วัน'));assert.equal(JSON.stringify(s),before);
 assert(c.manualRange(s,month,'2',2,3,'M').ok);
-assert(c.manualRange(fresh(),month,'9',2,6,'X').ok,'early duties are excluded from card streaks');assert(c.manualRange(fresh(),month,'2',2,6,'R').ok);
+assert(!c.manualRange(fresh(),month,'9',2,6,'X').ok,'separate rest rule prohibits adjacent early duties');assert(!c.manualRange(fresh(),month,'2',2,6,'R').ok);
 // Read both dates of adjacent months; an adjacent excluded row is treated as blank.
 for(const side of [-1,1])for(const split of [1,2]){
  s=fresh();const adjacent=c.monthOffset(month,side);s.months[adjacent]=c.freshMonth(adjacent);
