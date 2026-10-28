@@ -21,7 +21,7 @@ for(const[previous,next]of [['A','R'],['A','X'],...early.flatMap(a=>early.map(b=
   s.months[adjacent].excludedStaffIds=['2'];assert(!c.audit(s,month).issues.some(i=>i.type==='rest'&&i.p==='2'));
  }
 }
-// A separating day permits dawn again; R -> N remains permitted as requested.
+// A non-working day or one card shift can separate dawn within three working days.
 for(const gap of ['', 'OFF', 'VAC', 'N', 'M', 'R']){
  const s=fresh();put(s,'2',5,'R');if(gap)put(s,'2',6,c.CODES.includes(gap)?gap:'');if(['OFF','VAC'].includes(gap))s.months[month].cells['2|6'].block=gap;
  const r=c.manualRange(s,month,'2',7,7,'X');assert.equal(r.ok,gap!=='R');

@@ -47,25 +47,29 @@ function dutyCode(state,month,m,p,d,lockedOnly=false,n=daysIn(month)){
  return d===0||d===n+1?boundary(state,month,p,side):'';
 }
 function consecutiveConflict(state,month,m,p,d,code=cell(m,p.id,d).code,lockedOnly=false,n=daysIn(month)){
- if(!CARD_CODES.includes(code))return false;
- const work=offset=>CARD_CODES.includes(dutyCode(state,month,m,p,d+offset,lockedOnly,n)),previous=work(-1),next=work(1);
- return previous&&(next||work(-2))||next&&work(2);
+ if(!CODES.includes(code))return false;
+ for(const [codes,limit]of [[CARD_CODES,2],[CODES,3]]){
+  if(!codes.includes(code))continue;let count=1;
+  for(const side of [-1,1])for(let offset=1;offset<=limit;offset++){if(!codes.includes(dutyCode(state,month,m,p,d+side*offset,lockedOnly,n)))break;if(++count>limit)return true;}
+ }
+ return false;
 }
 function consecutiveViolations(state,month,m,p,lo=1,hi=daysIn(month)){
- const n=daysIn(month),result=[];for(let end=lo;end<=hi+2;end++)if([end-2,end-1,end].every(d=>CARD_CODES.includes(dutyCode(state,month,m,p,d,false,n))))result.push(Math.max(1,Math.min(n,end)));
+ const n=daysIn(month),result=[];for(const [codes,limit]of [[CARD_CODES,2],[CODES,3]])for(let end=lo;end<=hi+limit;end++)if(Array.from({length:limit+1},(_,i)=>end-i).every(d=>codes.includes(dutyCode(state,month,m,p,d,false,n))))result.push(Math.max(1,Math.min(n,end)));
  return[...new Set(result)];
 }
 function maxAssignable(state,month,m,p,codes){
- const n=daysIn(month),previous=dutyCode(state,month,m,p,0),run=CARD_CODES.includes(previous)?(CARD_CODES.includes(dutyCode(state,month,m,p,-1))?2:1):0,excl=state.pairExclusions??DEFAULT_PAIR_EXCLUSIONS,people=monthPeople(state,month);
- let states=[{code:previous,run,value:0}];
+ const n=daysIn(month),previous=dutyCode(state,month,m,p,0),excl=state.pairExclusions??DEFAULT_PAIR_EXCLUSIONS,people=monthPeople(state,month);
+ const boundaryRun=(codes,side,limit)=>{let run=0;for(let i=0;i<limit;i++){if(!codes.includes(dutyCode(state,month,m,p,side<0?-i:n+1+i)))break;run++}return run};
+ let states=[{code:previous,run:boundaryRun(CODES,-1,3),cardRun:boundaryRun(CARD_CODES,-1,2),value:0}];
  for(let d=1;d<=n;d++){
   const current=cell(m,p.id,d),fixed=current.locked?current.code:'',paired=code=>people.some(other=>other.id!==p.id&&cell(m,other.id,d).locked&&pairConflict(p.id,other.id,code,cell(m,other.id,d).code,excl));
   const choices=fixed?[fixed]:current.block?['']:['',...codes.filter(code=>m.days[d].need[code]>0&&eligibleOnDay(p,month,d,code)&&!paired(code))],next=new Map();
-  for(const prev of states)for(const code of choices){const work=CARD_CODES.includes(code),run=work?prev.run+1:0;if(run>2||restConflict(prev.code,code))continue;const value=prev.value+(codes.includes(code)?1:0),key=code+'|'+run;if(!next.has(key)||next.get(key).value<value)next.set(key,{code,run,value})}
+  for(const prev of states)for(const code of choices){const run=CODES.includes(code)?prev.run+1:0,cardRun=CARD_CODES.includes(code)?prev.cardRun+1:0;if(run>3||cardRun>2||restConflict(prev.code,code))continue;const value=prev.value+(codes.includes(code)?1:0),key=code+'|'+run+'|'+cardRun;if(!next.has(key)||next.get(key).value<value)next.set(key,{code,run,cardRun,value})}
   states=[...next.values()];if(!states.length)return 0;
  }
- const next=dutyCode(state,month,m,p,n+1),afterNext=dutyCode(state,month,m,p,n+2),nextRun=CARD_CODES.includes(next)?(CARD_CODES.includes(afterNext)?2:1):0;
- return Math.max(0,...states.filter(s=>!restConflict(s.code,next)&&s.run+nextRun<=2).map(s=>s.value));
+ const next=dutyCode(state,month,m,p,n+1),nextRun=boundaryRun(CODES,1,3),nextCardRun=boundaryRun(CARD_CODES,1,2);
+ return Math.max(0,...states.filter(s=>!restConflict(s.code,next)&&s.run+nextRun<=3&&s.cardRun+nextCardRun<=2).map(s=>s.value));
 }
 function categoryTotals(t){return{card:t.N+t.M+t.A,dawn:t.R+t.X}}
 function categoryTargets(state,month,raw=state.months[month].categoryQuotas||{}){
@@ -115,8 +119,6 @@ function normalizePayRates(state){
 }
 function totalPay(state,t){return PAY_GROUPS.reduce((sum,g)=>sum+g.codes.reduce((count,code)=>count+t[code],0)*Math.round(payRate(state,t.id,g.id)*100),0)/100}
 // Soft income priorities; permissions, leave, locks and explicit goals still win.
-function earningsTier(p){return['2','3','4'].includes(p.id)?4:/^(?:จพ\.?เวช|เจ้าพนักงานเวช)/.test(String(p.role||'').replace(/\s/g,''))?3:/^นวก\./.test(p.role||'')?2:p.id==='8'?1:0}
-function earningsWeight(p){return({4:1.12,3:1.04,2:1,1:.94})[earningsTier(p)]||1}
 function distributionPlan(state,month,options={}){
  const m=state.months[month],n=daysIn(month),people=monthPeople(state,month).filter(p=>p.active),roster=code=>people.filter(p=>canUseSymbol(p,code)&&p.allowed.includes(code)).map(p=>p.id);
  const rIds=roster('R'),xIds=roster('X'),need=(d,code)=>m.autoCapacity?.[d]?.[code]??m.days[d].need[code],total=code=>Object.keys(m.days).reduce((sum,d)=>sum+need(d,code),0);
@@ -142,13 +144,13 @@ function distributionPlan(state,month,options={}){
  // Estimate the early share before date matching. Income priorities and rates
  // determine card workloads, rather than equal total counts.
  const estimatedEarly=Object.fromEntries(people.map(p=>[p.id,Math.min(earlyCapacity[p.id],goals[p.id]?.dawn??Math.max(lockedR[p.id]+lockedX[p.id],(rIds.includes(p.id)?totalR/Math.max(1,rIds.length):0)+(xIds.includes(p.id)?totalX/Math.max(1,xIds.length):0)))]));
+ // Plan using actual rates. Main staff lead; Rapeephan follows, while
+ // academics need fewer card shifts to approach main income minus 600 baht.
  const paidCard=people.filter(p=>cardCapacity[p.id]>0&&payRate(state,p.id,'card')>0),fallbackRate=paidCard.length?paidCard.reduce((sum,p)=>sum+payRate(state,p.id,'card'),0)/paidCard.length:1;
  const workloadScore=p=>{
   const count=preferredTotal[p.id],early=Math.min(count,estimatedEarly[p.id]),card=Math.max(lockedCard[p.id],count-early);
   if(!cardCapacity[p.id]||!totalSlots||totalSlots===totalR+totalX)return count+(main.has(p.id)?-.25:p.id==='8'?0:1.5);
-  // Zero-rate work cannot close an earnings gap; use a neutral rate to avoid
-  // filling that person's entire availability in pursuit of impossible parity.
-  return(card*(payRate(state,p.id,'card')||fallbackRate)+early*payRate(state,p.id,'dawn'))/earningsWeight(p)+(main.has(p.id)?-.25:p.id==='8'?0:1.5);
+  return card*(payRate(state,p.id,'card')||fallbackRate)+early*payRate(state,p.id,'dawn')+(academics.includes(p)?600:p.id==='8'?300:0)+(main.has(p.id)?-.25:0);
  };
  // Plan total workloads before splitting early shifts. In particular, a small
  // card goal for a main worker may require more early shifts to keep academics below them.
@@ -226,17 +228,21 @@ function balanceEarnings(state,month,m,targets,goals,excl){
  const paid=people.filter(p=>p.allowed.some(code=>CARD_CODES.includes(code)&&canUseSymbol(p,code))&&payRate(state,p.id,'card')>0),academics=policy.academic.filter(p=>paid.includes(p));
  if(paid.length<2)return m;
  const pays=Object.fromEntries(paid.map(p=>[p.id,totalPay(state,ts[p.id])])),movable=p=>targets[p.id]===undefined&&goals[p.id]?.card===undefined;
+ const referenceStaff=paid.filter(p=>['2','3','4'].includes(p.id)),reference=referenceStaff.length?referenceStaff:policy.main.filter(p=>paid.includes(p));
  function score(){
-  const mean=paid.reduce((sum,p)=>sum+pays[p.id],0)/paid.length;
+  if(!reference.length)return 0;
+  const mean=reference.reduce((sum,p)=>sum+pays[p.id],0)/reference.length;
   const average=academics.reduce((sum,p)=>sum+ts[p.id].total,0)/Math.max(1,academics.length);
-  let cost=paid.reduce((sum,p)=>sum+(pays[p.id]-mean)**2,0)+academics.reduce((sum,p)=>sum+25000*(ts[p.id].total-average)**2,0);
-  // Prefer each higher tier to earn more than every member below it. Ranking
-  // carries more weight than small pay gaps; an impossible rank never blocks solving.
-  for(const higher of paid)for(const lower of paid)if(earningsTier(higher)>earningsTier(lower)&&earningsTier(lower)>0){const gap=pays[lower.id]-pays[higher.id]+1;if(gap>0)cost+=1000000+100*gap**2;}
-  const primary=paid.filter(p=>earningsTier(p)===4),stat=paid.filter(p=>earningsTier(p)===3),secondary=paid.find(p=>p.id==='8');
-  for(const p of primary)for(const other of paid)if(earningsTier(other)<4)cost+=100000*Math.max(0,ts[other.id].total-ts[p.id].total+1)**2;
-  if(secondary&&stat.length)cost+=100000*Math.max(0,Math.abs(ts[secondary.id].total-ts[stat[0].id].total)-2)**2;
-  if(secondary&&academics.length)cost+=Math.max(0,Math.min(...academics.map(p=>pays[p.id]))-pays[secondary.id]-Math.max(...academics.map(p=>payRate(state,p.id,'card'))))**2;
+  let cost=0;
+  for(const p of paid){
+   if(academics.includes(p)){
+    const gap=mean-pays[p.id],outside=Math.max(0,500-gap,gap-700);
+    cost+=50*outside**2+.1*(gap-600)**2;
+   }else cost+=(pays[p.id]-(p.id==='8'?mean-300:mean))**2;
+  }
+  // Similar academic workloads are a preference, subordinate to actual rates.
+  cost+=academics.reduce((sum,p)=>sum+1000*(ts[p.id].total-average)**2,0);
+  for(const p of policy.main.filter(p=>paid.includes(p)))for(const other of academics)cost+=100000*Math.max(0,ts[other.id].total-ts[p.id].total)**2;
   return cost;
  }
  function valid(p,d,code,donor){const previous=dutyCode(state,month,m,p,d-1,false,n),next=dutyCode(state,month,m,p,d+1,false,n);return eligibleOnDay(p,month,d,code)&&!restConflict(previous,code)&&!restConflict(code,next)&&!consecutiveConflict(state,month,m,p,d,code,false,n)&&!people.some(other=>other.id!==p.id&&other.id!==donor&&pairConflict(p.id,other.id,code,cell(m,other.id,d).code,excl))}
@@ -298,7 +304,7 @@ function repairTotals(state,month,base,plan,targets,goals,excl,required={}){
 function audit(state,month,options={}){let m=state.months[month],n=daysIn(month),people=monthPeople(state,month),included=new Set(people.map(p=>p.id)),issues=[],ts=totals(state,month);const add=(type,text,p,d)=>issues.push({type,text,p,d});
 for(let d=1;d<=n;d++){for(let code of CODES){let got=people.filter(p=>cell(m,p.id,d).code===code).length,need=m.days[d].need[code];if(got!==need)add('coverage','วันที่ '+d+' · '+META[code].name+' '+got+'/'+need+' คน',null,d)}}
 for(let p of people){for(let d=1;d<=n;d++){let c=cell(m,p.id,d);if(c.block&&!canUseSymbol(p,c.block))add('eligibility',p.name+' วันที่ '+d+' · รับได้เฉพาะ รพ.สต. (ร สีแดง) หรือช่องว่าง',p.id,d);if(c.code&&c.block)add('blocked',p.name+' วันที่ '+d+' · มีเวรชน '+c.block,p.id,d);if(c.code&&!eligibleOnDay(p,month,d,c.code))add('eligibility',p.name+' วันที่ '+d+' · ไม่รับเวรประเภทนี้',p.id,d);let prev=d===1?boundary(state,month,p,-1):cell(m,p.id,d-1).code;if(restConflict(prev,c.code))add('rest',p.name+' วันที่ '+d+' · '+restDescription(c.code,prev),p.id,d)}
-for(const d of consecutiveViolations(state,month,m,p))add('consecutive',p.name+' วันที่ '+d+' · มีเวรติดกันเกิน 2 วัน (นับเฉพาะ ด ช บ รวมกัน ไม่รวมรุ่งอรุณ และตรวจข้ามเดือน)',p.id,d);
+for(const d of consecutiveViolations(state,month,m,p))add('consecutive',p.name+' วันที่ '+d+' · ห้องบัตรติดกันเกิน 2 วัน หรือรวมรุ่งอรุณเกิน 3 วัน (ตรวจข้ามเดือน)',p.id,d);
 const next=boundary(state,month,p,1);if(restConflict(cell(m,p.id,n).code,next))add('rest',p.name+' วันสุดท้าย · '+restDescription(next,cell(m,p.id,n).code)+'เดือนถัดไป',p.id,n)}
 let excl=options.pairExclusions!==undefined?options.pairExclusions:(state.pairExclusions!==undefined?state.pairExclusions:DEFAULT_PAIR_EXCLUSIONS);
 if(excl&&excl.length){for(let d=1;d<=n;d++){for(let[x,y]of excl){if(!included.has(x)||!included.has(y))continue;let cX=cell(m,x,d),cY=cell(m,y,d);if(pairConflict(x,y,cX.code,cY.code,excl)){let pX=state.people.find(p=>p.id===x),pY=state.people.find(p=>p.id===y);add('exclusion','วันที่ '+d+' · '+(pX?pX.name:x)+' กับ '+(pY?pY.name:y)+' มีกะเดียวกันในวันเดียวกัน (สองคนนี้ต้องอยู่คนละกะ)',x,d)}}}}
@@ -374,13 +380,13 @@ function solve(state,month,opts={}){
  for(let[pid,tgt]of Object.entries(targets)){if(counts[pid]>tgt){let p=people.find(x=>x.id===pid);fixedIssues.push((p?p.name:pid)+' มีเวรล็อกไว้ ('+counts[pid]+' เวร) เกินเป้าหมาย ('+tgt+' เวร)')}}
  const baseCategories=Object.fromEntries(totals({...state,months:{...state.months,[month]:base}},month).map(t=>[t.id,categoryTotals(t)]));
  for(const p of people)for(const g of SHIFT_GROUPS){const target=categoryGoals[p.id]?.[g.id],actual=baseCategories[p.id][g.id];if(target!==undefined&&actual>target)fixedIssues.push(p.name+' · '+g.label+' ล็อกไว้ '+actual+' เวร มากกว่าเป้า '+target+' เวร กรุณาเพิ่มเป้าหรือปลดล็อกเวรบางช่อง')}
- for(const p of people)for(const d of consecutiveViolations(state,month,base,p))fixedIssues.push(p.name+' วันที่ '+d+' · เวรห้องบัตรที่ล็อกไว้ติดกันเกิน 2 วัน นับ ด ช บ รวมกันและข้ามเดือน กรุณาปลดล็อกหรือแก้บางช่อง');
+ for(const p of people)for(const d of consecutiveViolations(state,month,base,p))fixedIssues.push(p.name+' วันที่ '+d+' · เวรที่ล็อกไว้ผิดกติกา: ห้องบัตรติดกันเกิน 2 วัน หรือรวมรุ่งอรุณเกิน 3 วัน (ตรวจข้ามเดือน) กรุณาปลดล็อกหรือแก้บางช่อง');
  if(fixedIssues.length)return{ok:false,message:fixedIssues.slice(0,5).join('\n'),reason:'fixed'};
  const capacityCache=new Map();
  function capacityFor(p,codes){const k=p.id+'|'+codes.join(',');if(!capacityCache.has(k))capacityCache.set(k,maxAssignable(state,month,base,p,codes));return capacityCache.get(k)}
  for(const p of people){
-  for(const category of SHIFT_GROUPS){const target=categoryGoals[p.id]?.[category.id];if(target===undefined)continue;const maximum=capacityFor(p,category.codes);if(target>maximum)return{ok:false,reason:'quota',message:p.name+' ตั้งเป้า'+category.label+' '+target+' เวร แต่วันเปิดเวร วันลา เวรล็อก และกติกาห้องบัตรไม่เกิน 2 วันติดกัน / รุ่งอรุณไม่ติดกัน รองรับได้สูงสุด '+maximum+' เวร กรุณาปรับเป้าหรือวันเปิดเวร'};}
-  if(targets[p.id]!==undefined){const maximum=capacityFor(p,CODES);if(targets[p.id]>maximum)return{ok:false,reason:'quota',message:p.name+' ตั้งเป้ารวม '+targets[p.id]+' เวร แต่ลงได้สูงสุด '+maximum+' วันตามกติกาห้องบัตรไม่เกิน 2 วันติดกัน / รุ่งอรุณไม่ติดกัน กรุณาปรับเป้าหรือวันลา'};}
+  for(const category of SHIFT_GROUPS){const target=categoryGoals[p.id]?.[category.id];if(target===undefined)continue;const maximum=capacityFor(p,category.codes);if(target>maximum)return{ok:false,reason:'quota',message:p.name+' ตั้งเป้า'+category.label+' '+target+' เวร แต่วันเปิดเวร วันลา เวรล็อก และกติกาห้องบัตรไม่เกิน 2 วันติดกัน และรวมรุ่งอรุณไม่เกิน 3 วันติดกัน / รุ่งอรุณไม่ติดกัน รองรับได้สูงสุด '+maximum+' เวร กรุณาปรับเป้าหรือวันเปิดเวร'};}
+  if(targets[p.id]!==undefined){const maximum=capacityFor(p,CODES);if(targets[p.id]>maximum)return{ok:false,reason:'quota',message:p.name+' ตั้งเป้ารวม '+targets[p.id]+' เวร แต่ลงได้สูงสุด '+maximum+' วันตามกติกาห้องบัตรไม่เกิน 2 วันติดกัน และรวมรุ่งอรุณไม่เกิน 3 วันติดกัน / รุ่งอรุณไม่ติดกัน กรุณาปรับเป้าหรือวันลา'};}
  }
  const policy=workloadPolicy(state,month);
  const maximum=Object.fromEntries(people.map(p=>[p.id,Math.min(targets[p.id]??n,capacityFor(p,CODES),(categoryGoals[p.id]?.card??capacityFor(p,['N','M','A']))+(categoryGoals[p.id]?.dawn??capacityFor(p,['R','X'])))]));
@@ -468,7 +474,7 @@ function solve(state,month,opts={}){
   }
   const failedDays=new Set(),dailyDemand=Object.fromEntries(Array.from({length:n},(_,i)=>[i+1,demand.filter(s=>s.d===i+1).length]));
   function dfs(left){
-   const day=left[0]?.d,memo=distribution&&chronological&&day&&left.filter(s=>s.d===day).length===dailyDemand[day]?day+'|'+people.map(p=>cnt[p.id]+','+rCnt[p.id]+','+xCnt[p.id]+','+(dutyCode(state,month,m,p,day-1)==='A'?1:['R','X'].includes(dutyCode(state,month,m,p,day-1))?2:0)+','+(CARD_CODES.includes(dutyCode(state,month,m,p,day-1))?(CARD_CODES.includes(dutyCode(state,month,m,p,day-2))?2:1):0)).join('|'):null;
+   const day=left[0]?.d,memo=distribution&&chronological&&day&&left.filter(s=>s.d===day).length===dailyDemand[day]?day+'|'+people.map(p=>cnt[p.id]+','+rCnt[p.id]+','+xCnt[p.id]+','+(dutyCode(state,month,m,p,day-1)==='A'?1:['R','X'].includes(dutyCode(state,month,m,p,day-1))?2:0)+','+(CARD_CODES.includes(dutyCode(state,month,m,p,day-1))?(CARD_CODES.includes(dutyCode(state,month,m,p,day-2))?2:1):0)+','+(CODES.includes(dutyCode(state,month,m,p,day-1))?(CODES.includes(dutyCode(state,month,m,p,day-2))?(CODES.includes(dutyCode(state,month,m,p,day-3))?3:2):1):0)).join('|'):null;
    if(memo&&failedDays.has(memo))return false;
    const result=search(left);if(memo&&!result&&!timedOut)failedDays.add(memo);return result;
   }
@@ -553,7 +559,7 @@ function solve(state,month,opts={}){
    return{ok:false,message:'ผลจัดเวรยังไม่ผ่านการตรวจ: '+(a.issues[0]?.text||'กรุณาตรวจการตั้งค่า')};
   }
  }
- return{ok:false,reason:timedOut?'timeout':'infeasible',message:timedOut?'ยังหาคำตอบไม่ทันเวลาที่กำหนด ลองจัดอีกครั้ง หรือปลดล็อกบางช่อง / ตรวจวัน OFF และ VAC':'ไม่พบตารางที่ตรงทุกเงื่อนไข ตรวจจำนวนคน วันลา เวรที่ล็อก เป้ารายคน สิทธิ์รับเวร และกติกาห้องบัตรไม่เกิน 2 วันติดกัน / รุ่งอรุณไม่ติดกัน',nodes};
+ return{ok:false,reason:timedOut?'timeout':'infeasible',message:timedOut?'ยังหาคำตอบไม่ทันเวลาที่กำหนด ลองจัดอีกครั้ง หรือปลดล็อกบางช่อง / ตรวจวัน OFF และ VAC':'ไม่พบตารางที่ตรงทุกเงื่อนไข ตรวจจำนวนคน วันลา เวรที่ล็อก เป้ารายคน สิทธิ์รับเวร และกติกาห้องบัตรไม่เกิน 2 วันติดกัน และรวมรุ่งอรุณไม่เกิน 3 วันติดกัน / รุ่งอรุณไม่ติดกัน',nodes};
 }
 // Validate a whole painted range before committing anything to the live state.
 function manualRange(state,month,id,start,end,value){
@@ -575,7 +581,7 @@ function manualRange(state,month,id,start,end,value){
   if(restConflict(prev,cell(m,id,d).code))return{ok:false,message:'วันที่ '+d+' '+restDescription(cell(m,id,d).code,prev)+' · ยังไม่ได้แก้ไขทุกช่องที่เลือก'};
  }
  if(hi===n&&restConflict(cell(m,id,n).code,boundary(state,month,p,1)))return{ok:false,message:restDescription(boundary(state,month,p,1),cell(m,id,n).code)+'ข้ามเดือน · ยังไม่ได้แก้ไขทุกช่องที่เลือก'};
- const consecutive=consecutiveViolations(state,month,m,p,lo,hi);if(consecutive.length)return{ok:false,message:p.name+' วันที่ '+consecutive[0]+' · ห้ามลงห้องบัตรติดกันเกิน 2 วัน นับ ด ช บ รวมกัน รุ่งอรุณไม่นับ และตรวจข้ามเดือน · ยังไม่ได้แก้ไขทุกช่องที่เลือก'};
+ const consecutive=consecutiveViolations(state,month,m,p,lo,hi);if(consecutive.length)return{ok:false,message:p.name+' วันที่ '+consecutive[0]+' · ห้ามลงห้องบัตรติดกันเกิน 2 วัน หรือรวมรุ่งอรุณเกิน 3 วัน (ตรวจข้ามเดือน) · ยังไม่ได้แก้ไขทุกช่องที่เลือก'};
  if(m.calendarRules&&['R','X'].includes(code))for(let d=lo;d<=hi;d++)m.days[d].need[code]=Math.max(m.days[d].need[code],monthPeople(state,month).filter(person=>cell(m,person.id,d).code===code).length);
  return{ok:true,month:m,changed};
 }

@@ -18,7 +18,7 @@ for(const p of seed.people){
  s.months[s.selected].days[2].holiday=true;assert.equal(c.eligibleOnDay(p,s.selected,2,'N'),p.id!=='9');
 }
 s=fresh();s.people[0].allowed=['M','A','R','X'];assert(!c.manualRange(s,s.selected,'1',2,2,'N').ok);s.people[0].allowed.push('N');s.people[0].active=false;assert(!c.manualRange(s,s.selected,'1',2,2,'N').ok);
-// Unambiguous examples from the supplied November image now match the clarified rules.
+// The older image still satisfies pair/night policies, but now violates the combined streak limit.
 s=fresh();const examples={'1':[[1,'M'],[6,'N'],[13,'R'],[14,'N'],[15,'M'],[16,'R']],'2':[[8,'N'],[9,'R'],[10,'N']],'6':[[21,'M'],[22,'M'],[23,'R']],'8':[[1,'A'],[3,'N'],[14,'M'],[16,'A']]};for(const[id,days]of Object.entries(examples))for(const[d,code]of days)put(s,id,d,code);
-assert(!c.audit(s,s.selected).issues.some(i=>['consecutive','exclusion','eligibility'].includes(i.type)));
+assert(!c.audit(s,s.selected).issues.some(i=>['exclusion','eligibility'].includes(i.type)));assert(c.audit(s,s.selected).issues.some(i=>i.type==='consecutive'));
 console.log('PASS: all 25 pair combinations, same-time early grouping, different locked shifts, pair totals above month length, every eligible night staff member and supplied-image examples');

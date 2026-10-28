@@ -41,7 +41,7 @@ function arrangedSecondary(s){
  assert.equal(ts.reduce((sum,t)=>sum+t.total,0),12);
  assert(secondary.total<=2,'secondary staff receive fewer shifts before the main group');
  assert(ts.slice(0,4).every(t=>c.totalPay(next,t)>c.totalPay(next,secondary)),'Rapeephan has the lowest income');
- assert(Math.abs(secondary.total-ts[0].total)<=2,'secondary and medical records workloads stay close');
+ assert(ts.slice(1,4).every(t=>t.total>=secondary.total),'scarce card shifts favor core staff before Rapeephan');
  return next;
 }
 // Impossible typed totals get a specific explanation without changing any cells.

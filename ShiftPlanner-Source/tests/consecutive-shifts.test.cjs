@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const seed=JSON.parse(vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../js/data.js'),'utf8')+';JSON.stringify(SEED)'));
 function fresh(month='2026-11'){const s=c.clone(seed);s.selected=month;s.months={[month]:c.freshMonth(month)};return s}
 const put=(s,month,id,d,code,locked=true)=>s.months[month].cells[c.key(id,d)]={code,block:'',locked};
-// Of all 125 mixed sequences, only the 27 N/M/A triples hit the card streak limit.
+// Of all 125 mixed sequences, only the 27 card-only triples hit the two-day card limit.
 for(const first of c.CODES)for(const second of c.CODES)for(const third of c.CODES){
  const s=fresh(),m=s.months[s.selected],p=s.people[1];put(s,s.selected,p.id,1,first);put(s,s.selected,p.id,2,second);put(s,s.selected,p.id,3,third);
  const limited=[first,second,third].every(code=>c.CARD_CODES.includes(code));assert.equal(c.consecutiveConflict(s,s.selected,m,p,3),limited);assert.equal(c.audit(s,s.selected).issues.some(i=>i.type==='consecutive'&&i.p===p.id&&i.d===3),limited);if(!limited)continue;
@@ -13,7 +13,7 @@ for(const gap of ['', 'OFF', 'VAC', 'R', 'X']){
 }
 // Detect a third day inserted between two existing duties, and reject a whole drag.
 let s=fresh(),month=s.selected;put(s,month,'2',1,'N');put(s,month,'2',3,'M');let before=JSON.stringify(s);
-assert(!c.manualRange(s,month,'2',2,2,'M').ok);assert(c.manualRange(s,month,'2',2,2,'R').ok,'KIOS separates two card days');assert.equal(JSON.stringify(s),before);
+assert(!c.manualRange(s,month,'2',2,2,'M').ok);assert(c.manualRange(s,month,'2',2,2,'R').ok,'three mixed days are allowed');assert.equal(JSON.stringify(s),before);
 s=fresh();before=JSON.stringify(s);let r=c.manualRange(s,month,'2',2,4,'M');assert.equal(r.ok,false);assert(r.message.includes('ติดกันเกิน 2 วัน'));assert.equal(JSON.stringify(s),before);
 assert(c.manualRange(s,month,'2',2,3,'M').ok);
 assert(!c.manualRange(fresh(),month,'9',2,6,'X').ok,'separate rest rule prohibits adjacent early duties');assert(!c.manualRange(fresh(),month,'2',2,6,'R').ok);
@@ -36,4 +36,24 @@ for(const month of ['2026-10','2026-11','2028-02']){
  for(const p of s.people)for(let d=1;d<=c.daysIn(month)-2;d++)assert(![d,d+1,d+2].every(day=>c.CARD_CODES.includes(c.cell(r.month,p.id,day).code)));
  s.months[month].categoryQuotas={'2':{card:c.daysIn(month)}};r=c.solve(s,month,{distribution:true});assert.equal(r.reason,'quota');assert(r.message.includes('กติกาห้องบัตรไม่เกิน 2 วันติดกัน'));
 }
-console.log('PASS: 27 card triples among 125 mixtures, early/empty/leave breaks, atomic dragging, both sides of month boundaries, exclusions, locked rejection, automatic rebuilding and true quota limits');
+console.log('PASS: 27 forbidden card triples among 125 mixed triples, early/empty/leave breaks, atomic dragging, both sides of month boundaries, exclusions, locked rejection, automatic rebuilding and true quota limits');
+
+// The reported row: N N X N A on 17–21 must flag the red dawn as work.
+s=fresh();for(const [i,code]of ['N','N','X','N','A'].entries())put(s,month,'3',17+i,code,false);
+assert(c.audit(s,month).issues.some(i=>i.type==='consecutive'&&i.p==='3'&&i.d===20));
+r=c.solve(s,month,{distribution:true,calendar:true,vary:true});assert(r.ok,r.message);assert(c.audit({...s,months:{[month]:r.month}},month).complete);
+
+// Every four-day run is forbidden, even when dawn splits the card shifts.
+for(const a of c.CODES)for(const b of c.CODES)for(const code of c.CODES)for(const e of c.CODES){
+ s=fresh();for(const [i,v]of [a,b,code,e].entries())put(s,month,'3',i+1,v);
+ assert(c.consecutiveConflict(s,month,s.months[month],s.people[2],4));assert(c.audit(s,month).issues.some(i=>i.type==='consecutive'&&i.p==='3'));
+}
+// Check every split of a mixed four-day run across either month boundary.
+for(const side of [-1,1])for(const split of [1,2,3]){
+ s=fresh();const adjacent=c.monthOffset(month,side);s.months[adjacent]=c.freshMonth(adjacent);const codes=['N','R','N','M'];
+ if(side<0){for(let i=0;i<split;i++)put(s,adjacent,'3',c.daysIn(adjacent)-split+1+i,codes[i]);for(let i=split;i<4;i++)put(s,month,'3',i-split+1,codes[i]);}
+ else{for(let i=0;i<4-split;i++)put(s,month,'3',c.daysIn(month)-(4-split)+1+i,codes[i]);for(let i=4-split;i<4;i++)put(s,adjacent,'3',i-(4-split)+1,codes[i]);}
+ assert(c.audit(s,month).issues.some(i=>i.type==='consecutive'&&i.p==='3'));assert.equal(c.solve(s,month,{distribution:true,calendar:true}).reason,'fixed');
+}
+s=fresh();assert.equal(c.maxAssignable(s,month,s.months[month],s.people[2],c.CARD_CODES),20);assert(c.maxAssignable(s,month,s.months[month],s.people[2],c.CODES)<=23);
+console.log('PASS: two card days / three mixed days, all 625 four-day mixtures, reported five-day row, all month-boundary splits and capacity limits');

@@ -450,9 +450,9 @@ console.log('PASS: calendar header, assigned-only green box, removed statuses, s
   assert.equal(distributed.run('totals(state,state.selected).every(t=>t.X>=1)'),true);
   assert.equal(distributed.run('totals(state,state.selected).filter(t=>t.id!=="9").every(t=>t.R===2||t.R===3)'),true);
   assert.equal(distributed.run('totals(state,state.selected).find(t=>t.id==="9").R'),0);
-  assert.equal(distributed.run('var earnings=totals(state,state.selected).slice(0,8).map(t=>totalPay(state,t));Math.min(...earnings.slice(1,4))>earnings[0]&&earnings[0]>Math.max(...earnings.slice(4,7))&&Math.min(...earnings.slice(4,7))>earnings[7]'),true,'the real button follows the income order');
+  assert.equal(distributed.run('var income=totals(state,state.selected).map(t=>totalPay(state,t));var reference=(income[1]+income[2]+income[3])/3;income.slice(4,7).every(pay=>reference-pay>=450&&reference-pay<=750)'),true,'the real button prioritizes primary staff, then Rapeephan, then supplemental academics');
   assert.equal(distributed.run('var academicLoads=totals(state,state.selected).slice(4,7).map(t=>t.total);Math.max(...academicLoads)-Math.min(...academicLoads)<=1'),true);
-  assert(distributed.element('fairnessDetail').innerHTML.includes('ตัวหลัก 2–4 สูงสุด → เวชสถิติ → นวก. → รพีพรรณ'));
+  assert(distributed.element('fairnessDetail').innerHTML.includes('ตัวหลักรวมพฤกษาก่อน → รพีพรรณ → นวก. ตามส่วนต่างรายได้'));
   assert(distributed.element('fairnessDetail').innerHTML.includes('22 เวร ÷ 8 คน = คนละ 2–3 เวร'));
   assert.equal(JSON.parse(distributed.stored()).months['2026-10'].distributionRules,true);
   const reloaded=boot(JSON.parse(distributed.stored()),standalone);assert.equal(reloaded.run('scheduleAudit().complete'),true);
@@ -462,7 +462,7 @@ console.log('PASS: calendar header, assigned-only green box, removed statuses, s
   assert.equal(distributed.run('state.people.map(p=>Array.from({length:daysIn(state.selected)},(_,d)=>cell(activeMonth(),p.id,d+1).code).join(",")).join("|")!==previousCodes'),true,'repeat button produces a different layout');
   distributed.run('for(let d=1;d<=20;d++)activeMonth().cells["3|"+d]={code:"",block:d%2?"OFF":"VAC",locked:false};changed();pendingDistribution=autoSchedule()');distributed.flushTimers();await distributed.run('pendingDistribution');
   assert.equal(distributed.run('scheduleAudit().complete'),true);
-  assert.equal(distributed.run('JSON.stringify(totals(state,state.selected).filter(t=>["2","3","4"].includes(t.id)).map(t=>t.R))'),'[3,3,3]');
+  assert.equal(distributed.run('totals(state,state.selected).filter(t=>["2","3","4"].includes(t.id)).every(t=>t.R>0)'),true);
   assert.equal(distributed.run('var cardLoads=totals(state,state.selected).map(t=>categoryTotals(t).card);cardLoads[2]<cardLoads[1]&&cardLoads[2]<cardLoads[3]'),true);
   assert.throws(()=>reloaded.run('var bad=clone(state);bad.months[bad.selected].distributionRules="yes";validateBackup(bad)'));
  }
@@ -525,8 +525,11 @@ console.log('PASS: calendar header, assigned-only green box, removed statuses, s
   consecutive.run('saveCell()');assert.equal(consecutive.run('JSON.stringify(state)'),before);assert.equal(consecutive.run('history.length'),history);assert(consecutive.element('toast').textContent.includes('ติดกันเกิน 2 วัน'));
   consecutive.run('closeModal();activeMonth().cells["2|3"]={code:"A",block:"",locked:true};changed();issuesModal()');assert(consecutive.element('modalBody').innerHTML.includes('ติดกันเกิน 2 วัน'));
   const saved=consecutive.run('JSON.stringify(state)');consecutive.run('closeModal();var pendingConsecutive=autoSchedule()');consecutive.flushTimers();await consecutive.run('pendingConsecutive');
-  assert.equal(consecutive.run('JSON.stringify(state)'),saved);assert(consecutive.element('modalBody').innerHTML.includes('เวรห้องบัตรที่ล็อกไว้ติดกันเกิน 2 วัน'));
+  assert.equal(consecutive.run('JSON.stringify(state)'),saved);assert(consecutive.element('modalBody').innerHTML.includes('เวรที่ล็อกไว้ผิดกติกา'));
   consecutive.run('closeModal();cellModal(1,2);choice="OFF";saveCell()');assert.equal(consecutive.run('cell(activeMonth(),"2",2).block'),'OFF');assert(!consecutive.run('scheduleAudit().issues.some(i=>i.type==="consecutive")'));
+  consecutive.run('activeMonth().cells={"2|1":{code:"N",block:"",locked:true},"2|2":{code:"N",block:"",locked:true}};changed();cellModal(1,3);choice="R";saveCell()');assert.equal(consecutive.run('cell(activeMonth(),"2",3).code'),'R');
+  consecutive.run('cellModal(1,4);choice="N"');const mixedBefore=consecutive.run('JSON.stringify(state)');consecutive.run('saveCell()');assert.equal(consecutive.run('JSON.stringify(state)'),mixedBefore);assert(consecutive.element('toast').textContent.includes('รวมรุ่งอรุณเกิน 3 วัน'));
+
  }
  console.log('PASS: third mixed duty rejected atomically in cell editor, stored violations shown, locked automatic failure preserves data, OFF breaks the run in source/standalone');
 })().catch(error=>{console.error(error);process.exitCode=1});

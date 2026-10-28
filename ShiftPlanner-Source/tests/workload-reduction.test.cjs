@@ -17,7 +17,7 @@ const rows=[
  '.X.X.X.X......................'
 ];
 let s=fresh();rows.forEach((row,i)=>{assert.equal(row.length,30);[...row].forEach((code,d)=>{if(code!=='.')s.months[month].cells[(i+1)+'|'+(d+1)]={code,block:'',locked:false}})});
-assert(c.audit(s,month,{distribution:true}).complete);
+assert(c.audit(s,month,{distribution:true}).issues.some(i=>i.type==='consecutive'),'legacy calendar must be rebuilt under the combined work limit');
 for(const [i,dawn]of [4,3,3,3,5,4,4,3].entries())s.months[month].categoryQuotas[String(i+1)]={dawn};
 s=recalculate(s);assert.equal(c.categoryTotals(c.totals(s,month).find(t=>t.id==='7')).dawn,4);
 // Lower each field after a generated calendar, retaining OFF/VAC and a lock.
