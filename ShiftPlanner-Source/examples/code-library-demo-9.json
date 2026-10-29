@@ -1,0 +1,546 @@
+{
+  "format": "shiftplanner-code-library",
+  "version": 1,
+  "records": [
+    {
+      "id": "demo-code-01",
+      "code": "A01",
+      "disease": "ข้อมูลทดสอบ 01 · ครบทุกรายละเอียด",
+      "conditions": "เงื่อนไขตัวอย่างข้อที่ 1\nเงื่อนไขตัวอย่างข้อที่ 2",
+      "procedures": "หัตถการตัวอย่าง A\nหัตถการตัวอย่าง B",
+      "note": "โน้ตทดสอบสำหรับรายการที่มีทั้งเงื่อนไขและหัตถการ",
+      "favorite": true
+    },
+    {
+      "id": "demo-code-02",
+      "code": "A02",
+      "disease": "ข้อมูลทดสอบ 02 · มีเงื่อนไข",
+      "conditions": "เงื่อนไขตัวอย่างสำหรับรายการนี้",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-03",
+      "code": "B01",
+      "disease": "ข้อมูลทดสอบ 03 · มีหัตถการ",
+      "conditions": "",
+      "procedures": "หัตถการตัวอย่างสำหรับรายการนี้",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-04",
+      "code": "C01",
+      "disease": "ข้อมูลทดสอบ 04 · มี Note",
+      "conditions": "",
+      "procedures": "",
+      "note": "บันทึกตัวอย่าง\nรองรับข้อความหลายบรรทัด",
+      "favorite": true
+    },
+    {
+      "id": "demo-code-05",
+      "code": "D01",
+      "disease": "ข้อมูลทดสอบ 05 · เงื่อนไขและหัตถการ",
+      "conditions": "เงื่อนไขตัวอย่าง D",
+      "procedures": "หัตถการตัวอย่าง D",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-06",
+      "code": "E01",
+      "disease": "ข้อมูลทดสอบ 06 · เงื่อนไขและ Note",
+      "conditions": "เงื่อนไขตัวอย่าง E",
+      "procedures": "",
+      "note": "โน้ตเพิ่มเติมของรายการ E01",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-07",
+      "code": "F01",
+      "disease": "ข้อมูลทดสอบ 07 · หัตถการและ Note",
+      "conditions": "",
+      "procedures": "หัตถการตัวอย่าง F",
+      "note": "โน้ตเพิ่มเติมของรายการ F01",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-08",
+      "code": "G01",
+      "disease": "ข้อมูลทดสอบ 08 · ยังไม่มีรายละเอียด",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": true
+    },
+    {
+      "id": "demo-code-09",
+      "code": "H01",
+      "disease": "ข้อมูลทดสอบ 09 · รายละเอียดหลายบรรทัด",
+      "conditions": "เงื่อนไขตัวอย่าง H\nเงื่อนไขเพิ่มเติมอีกหนึ่งบรรทัด",
+      "procedures": "หัตถการตัวอย่าง H",
+      "note": "โน้ตตัวอย่างบรรทัดแรก\nบรรทัดที่สองสำหรับดูการจัดข้อความ\nบรรทัดที่สามสำหรับดูรายละเอียดในหน้าต่างรายการ",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-10",
+      "code": "A10",
+      "disease": "ข้อมูลทดสอบ 10 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 10",
+      "procedures": "",
+      "note": "",
+      "favorite": true
+    },
+    {
+      "id": "demo-code-11",
+      "code": "B10",
+      "disease": "ข้อมูลทดสอบ 11 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-12",
+      "code": "C10",
+      "disease": "ข้อมูลทดสอบ 12 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 12",
+      "procedures": "หัตถการตัวอย่าง 12",
+      "note": "บันทึกทดสอบ 12\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-13",
+      "code": "D10",
+      "disease": "ข้อมูลทดสอบ 13 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-14",
+      "code": "E10",
+      "disease": "ข้อมูลทดสอบ 14 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 14",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-15",
+      "code": "F10",
+      "disease": "ข้อมูลทดสอบ 15 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "หัตถการตัวอย่าง 15",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-16",
+      "code": "G10",
+      "disease": "ข้อมูลทดสอบ 16 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 16",
+      "procedures": "",
+      "note": "บันทึกทดสอบ 16\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-17",
+      "code": "H10",
+      "disease": "ข้อมูลทดสอบ 17 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-18",
+      "code": "I10",
+      "disease": "ข้อมูลทดสอบ 18 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 18",
+      "procedures": "หัตถการตัวอย่าง 18",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-19",
+      "code": "J10",
+      "disease": "ข้อมูลทดสอบ 19 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-20",
+      "code": "K10",
+      "disease": "ข้อมูลทดสอบ 20 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 20",
+      "procedures": "",
+      "note": "บันทึกทดสอบ 20\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": true
+    },
+    {
+      "id": "demo-code-21",
+      "code": "L10",
+      "disease": "ข้อมูลทดสอบ 21 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "หัตถการตัวอย่าง 21",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-22",
+      "code": "M10",
+      "disease": "ข้อมูลทดสอบ 22 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 22",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-23",
+      "code": "N10",
+      "disease": "ข้อมูลทดสอบ 23 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-24",
+      "code": "O10",
+      "disease": "ข้อมูลทดสอบ 24 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 24",
+      "procedures": "หัตถการตัวอย่าง 24",
+      "note": "บันทึกทดสอบ 24\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-25",
+      "code": "P10",
+      "disease": "ข้อมูลทดสอบ 25 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-26",
+      "code": "Q10",
+      "disease": "ข้อมูลทดสอบ 26 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 26",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-27",
+      "code": "R10",
+      "disease": "ข้อมูลทดสอบ 27 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "หัตถการตัวอย่าง 27",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-28",
+      "code": "S10",
+      "disease": "ข้อมูลทดสอบ 28 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 28",
+      "procedures": "",
+      "note": "บันทึกทดสอบ 28\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-29",
+      "code": "T10",
+      "disease": "ข้อมูลทดสอบ 29 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-30",
+      "code": "U10",
+      "disease": "ข้อมูลทดสอบ 30 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 30",
+      "procedures": "หัตถการตัวอย่าง 30",
+      "note": "",
+      "favorite": true
+    },
+    {
+      "id": "demo-code-31",
+      "code": "V10",
+      "disease": "ข้อมูลทดสอบ 31 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-32",
+      "code": "W10",
+      "disease": "ข้อมูลทดสอบ 32 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 32",
+      "procedures": "",
+      "note": "บันทึกทดสอบ 32\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-33",
+      "code": "X10",
+      "disease": "ข้อมูลทดสอบ 33 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "หัตถการตัวอย่าง 33",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-34",
+      "code": "Y10",
+      "disease": "ข้อมูลทดสอบ 34 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 34",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-35",
+      "code": "Z10",
+      "disease": "ข้อมูลทดสอบ 35 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-36",
+      "code": "A11",
+      "disease": "ข้อมูลทดสอบ 36 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 36",
+      "procedures": "หัตถการตัวอย่าง 36",
+      "note": "บันทึกทดสอบ 36\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-37",
+      "code": "B11",
+      "disease": "ข้อมูลทดสอบ 37 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-38",
+      "code": "C11",
+      "disease": "ข้อมูลทดสอบ 38 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 38",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-39",
+      "code": "D11",
+      "disease": "ข้อมูลทดสอบ 39 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "หัตถการตัวอย่าง 39",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-40",
+      "code": "E11",
+      "disease": "ข้อมูลทดสอบ 40 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 40",
+      "procedures": "",
+      "note": "บันทึกทดสอบ 40\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": true
+    },
+    {
+      "id": "demo-code-41",
+      "code": "F11",
+      "disease": "ข้อมูลทดสอบ 41 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-42",
+      "code": "G11",
+      "disease": "ข้อมูลทดสอบ 42 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 42",
+      "procedures": "หัตถการตัวอย่าง 42",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-43",
+      "code": "H11",
+      "disease": "ข้อมูลทดสอบ 43 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-44",
+      "code": "I11",
+      "disease": "ข้อมูลทดสอบ 44 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 44",
+      "procedures": "",
+      "note": "บันทึกทดสอบ 44\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-45",
+      "code": "J11",
+      "disease": "ข้อมูลทดสอบ 45 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "หัตถการตัวอย่าง 45",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-46",
+      "code": "K11",
+      "disease": "ข้อมูลทดสอบ 46 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 46",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-47",
+      "code": "L11",
+      "disease": "ข้อมูลทดสอบ 47 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-48",
+      "code": "M11",
+      "disease": "ข้อมูลทดสอบ 48 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 48",
+      "procedures": "หัตถการตัวอย่าง 48",
+      "note": "บันทึกทดสอบ 48\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-49",
+      "code": "N11",
+      "disease": "ข้อมูลทดสอบ 49 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-50",
+      "code": "O11",
+      "disease": "ข้อมูลทดสอบ 50 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 50",
+      "procedures": "",
+      "note": "",
+      "favorite": true
+    },
+    {
+      "id": "demo-code-51",
+      "code": "P11",
+      "disease": "ข้อมูลทดสอบ 51 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "หัตถการตัวอย่าง 51",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-52",
+      "code": "Q11",
+      "disease": "ข้อมูลทดสอบ 52 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 52",
+      "procedures": "",
+      "note": "บันทึกทดสอบ 52\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-53",
+      "code": "R11",
+      "disease": "ข้อมูลทดสอบ 53 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-54",
+      "code": "S11",
+      "disease": "ข้อมูลทดสอบ 54 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 54",
+      "procedures": "หัตถการตัวอย่าง 54",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-55",
+      "code": "T11",
+      "disease": "ข้อมูลทดสอบ 55 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-56",
+      "code": "U11",
+      "disease": "ข้อมูลทดสอบ 56 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 56",
+      "procedures": "",
+      "note": "บันทึกทดสอบ 56\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-57",
+      "code": "V11",
+      "disease": "ข้อมูลทดสอบ 57 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "หัตถการตัวอย่าง 57",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-58",
+      "code": "W11",
+      "disease": "ข้อมูลทดสอบ 58 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 58",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-59",
+      "code": "X11",
+      "disease": "ข้อมูลทดสอบ 59 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "",
+      "procedures": "",
+      "note": "",
+      "favorite": false
+    },
+    {
+      "id": "demo-code-60",
+      "code": "Y11",
+      "disease": "ข้อมูลทดสอบ 60 · ทดสอบการ์ดและการแบ่งหน้า",
+      "conditions": "เงื่อนไขตัวอย่าง 60",
+      "procedures": "หัตถการตัวอย่าง 60",
+      "note": "บันทึกทดสอบ 60\nข้อความเพิ่มเติมสำหรับดูรายละเอียด",
+      "favorite": true
+    }
+  ]
+}

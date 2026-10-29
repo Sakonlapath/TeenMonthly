@@ -40,8 +40,9 @@ const CodeCatalog = (() => {
  function sort(rows){return [...rows].sort((a,b)=>a.code.localeCompare(b.code,'en',{numeric:true})||a.code.localeCompare(b.code))}
  function filter(rows,category='',query='',kind=[]){
   const terms=query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const categories=Array.isArray(category)?category:category?[category]:[];
   const kinds=Array.isArray(kind)?kind:kind==='both'?['conditions','procedures']:kind?[kind]:[];
-  return sort(rows.filter(r=>(!category||r.code[0]===category)&&kinds.every(k=>!!r[k])&&terms.every(t=>[r.code,r.disease,r.conditions,r.procedures,r.note].join(' ').toLocaleLowerCase().includes(t))));
+  return sort(rows.filter(r=>(!categories.length||categories.includes(r.code[0]))&&kinds.every(k=>!!r[k])&&terms.every(t=>[r.code,r.disease,r.conditions,r.procedures,r.note].join(' ').toLocaleLowerCase().includes(t))));
  }
  function upsert(rows,input,oldId=null){
   rows=records(rows);

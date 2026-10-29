@@ -25,6 +25,40 @@ function unzipStored(bytes){
 }
 async function main(){
  const b=boot();const model=b.run('CodeCatalog');
+ assert.throws(()=>b.run('CodeLibrary.lookup("")'));
+ // A large library stays bounded, while search, filters and export use every record.
+ const hundred=Array.from({length:100},(_,i)=>row('A'+String(i+1).padStart(3,'0'),{favorite:i>=96,note:i>=96?'ท้ายคลัง':''}));
+ const paged=boot({storage:new Map([[LOCAL,serialized(hundred)]])});
+ const visibleCodes=()=>Array.from(paged.$('codeResults').innerHTML.matchAll(/class="code-badge">([^<]+)</g),m=>m[1]);
+ assert.equal(visibleCodes().length,12);
+ assert(paged.$('codeCount').textContent.includes('แสดง 1–12'));
+ assert.equal((paged.$('codePagination').innerHTML.match(/class="code-pager"/g)||[]).length,1);
+ assert(!paged.$('codeResults').innerHTML.includes('class="code-pager"'));
+ assert(!paged.$('codeFavorites').innerHTML.includes('code-favorite-shortcuts'));
+ const arrow=(key,extra={})=>{let prevented=false;paged.events.keydown({key,preventDefault(){prevented=true},...extra});return prevented};
+ assert(arrow('ArrowRight'));assert(paged.$('codeCount').textContent.includes('แสดง 13–24'));
+ assert(arrow('ArrowLeft'));assert(paged.$('codeCount').textContent.includes('แสดง 1–12'));
+ assert(arrow('ArrowLeft'));assert(paged.$('codeCount').textContent.includes('แสดง 1–12'));
+ for(const extra of [{target:{closest(){return {}}}},{target:{isContentEditable:true}},{ctrlKey:true},{metaKey:true},{altKey:true},{shiftKey:true},{isComposing:true},{defaultPrevented:true}])assert.equal(arrow('ArrowRight',extra),false);
+ paged.$('modal').open=true;assert.equal(arrow('ArrowRight'),false);paged.$('modal').open=false;
+ paged.run('currentView="schedule"');assert.equal(arrow('ArrowRight'),false);paged.run('currentView="codes"');
+ assert(paged.$('codeCount').textContent.includes('แสดง 1–12'));
+ const seen=[];
+ for(let page=1;page<=9;page++){
+  paged.run('CodeLibrary.goToPage('+page+')');seen.push(...visibleCodes());
+  assert.equal(visibleCodes().length,page===9?4:12);
+ }
+ assert.equal(new Set(seen).size,100);assert.equal(seen.length,100);
+ paged.run('CodeLibrary.page(1)');assert(paged.$('codeCount').textContent.includes('แสดง 97–100'));
+ paged.run('CodeLibrary.goToPage(-1)');assert(paged.$('codeCount').textContent.includes('แสดง 1–12'));
+ paged.run('CodeLibrary.goToPage(9);CodeLibrary.search("A100")');assert.deepEqual(visibleCodes(),['A100']);
+ assert.equal(paged.$('codePagination').innerHTML,'');
+ paged.run('CodeLibrary.clearSearch();CodeLibrary.goToPage(9);CodeLibrary.kind("note",true)');assert.equal(visibleCodes().length,4);
+ paged.run('CodeLibrary.clearSearch();CodeLibrary.goToPage(9);CodeLibrary.favorites()');assert.equal(visibleCodes().length,4);
+ assert(paged.$('codeFavorites').innerHTML.includes('code-favorite-shortcuts'));
+ paged.run('CodeLibrary.favorites()');assert(!paged.$('codeFavorites').innerHTML.includes('code-favorite-shortcuts'));
+ paged.run('CodeLibrary.clearSearch();CodeLibrary.goToPage(9);CodeLibrary.excel(true)');
+ assert(unzipStored(paged.downloads.at(-1).content)['xl/worksheets/sheet1.xml'].includes('autoFilter ref="A1:F101"'));
  assert(b.$('codesView').innerHTML.includes('สวัสดีคนเก่งของเค้า'));
  assert(!/[♡♥❤]/u.test(b.$('codesView').innerHTML));
  assert(b.$('codesView').innerHTML.includes('<svg'));
@@ -68,7 +102,25 @@ async function main(){
  assert.deepEqual(Array.from(model.filter(multiRows,'','',['conditions','procedures','note']),r=>r.code),['A14']);
  assert.equal(model.filter(multiRows,'B','',['conditions','note']).length,0);
  assert.equal(model.filter(multiRows,'A','ติดตาม',['procedures','note'])[0].code,'A14');
+ assert.deepEqual(Array.from(model.filter(multiRows,['A','B'],'',['note']),r=>r.code),['A14','B11']);
+ assert.equal(model.filter(multiRows,[]).length,5);
+ const categories=boot({storage:new Map([[LOCAL,serialized(multiRows)]])});
+ categories.run('CodeLibrary.category("B");CodeLibrary.category("A")');
+ assert.equal(categories.$('codeCount').textContent,'พบ 5 จาก 5 รหัส · หมวด A, B');
+ for(const letter of ['A','B'])assert(categories.$('codesView').innerHTML.includes('aria-pressed="true" onclick="CodeLibrary.category(\''+letter+'\')"'));
+ categories.run('CodeLibrary.kind("note",true);CodeLibrary.excel(true)');
+ const multiCategorySheet=unzipStored(categories.downloads.at(-1).content)['xl/worksheets/sheet1.xml'];
+ assert(multiCategorySheet.includes('A14'));assert(multiCategorySheet.includes('B11'));assert(!multiCategorySheet.includes('A11'));
+ categories.run('CodeLibrary.category("A")');assert.equal(categories.$('codeCount').textContent,'พบ 1 จาก 5 รหัส · หมวด B');
+ categories.run('CodeLibrary.edit()');assert(categories.$('modalBody').innerHTML.includes('<option selected>B</option>'));
+ categories.run('CodeLibrary.category("B")');assert.equal(categories.$('codeCount').textContent,'พบ 2 จาก 5 รหัส');
+ categories.run('CodeLibrary.category("Z");CodeLibrary.category("")');assert.equal(categories.$('codeCount').textContent,'พบ 2 จาก 5 รหัส');
  const multi=boot({storage:new Map([[LOCAL,serialized(multiRows)]])});
+ multi.run('CodeLibrary.category("B");CodeLibrary.kind("procedures",true)');
+ assert.equal(multi.run('CodeLibrary.lookup("A13").length'),1,'chat lookup ignores page filters');
+ multi.run('CodeLibrary.lookup("A13")[0].disease="changed copy"');
+ assert.equal(multi.run('CodeLibrary.lookup("A13")[0].disease'),'ชื่อโรคทดสอบ');
+ multi.run('CodeLibrary.clearSearch()');
  multi.run('CodeLibrary.render();CodeLibrary.kind("conditions",true);CodeLibrary.kind("procedures",true);CodeLibrary.kind("conditions",true)');
  assert.equal(multi.$('codeCount').textContent,'พบ 2 จาก 5 รหัส');
  multi.run('CodeLibrary.category("A")');
@@ -116,11 +168,12 @@ async function main(){
  assert(!b.$('codeResults').innerHTML.includes('<img'));
  const firstId=b.idFor('A001');
  b.run('CodeLibrary.favorite('+JSON.stringify(firstId)+')');assert.equal(JSON.parse(b.storage.get(LOCAL)).records[0].favorite,true);
- assert(b.$('codeFavorites').innerHTML.includes('A001'));
+ assert(!b.$('codeFavorites').innerHTML.includes('code-favorite-shortcuts'));
  b.run('CodeLibrary.edit()');b.form(row('A001'));b.run('CodeLibrary.save("")');
  assert.equal(JSON.parse(b.storage.get(LOCAL)).records.length,2);
  const secondId=b.idFor('A001',1);assert.notEqual(firstId,secondId);
  b.run('CodeLibrary.favorites()');assert.equal(b.$('codeCount').textContent,'พบ 1 จาก 2 รหัส');
+ assert(b.$('codeFavorites').innerHTML.includes('A001'));
  b.run('CodeLibrary.excel(true)');const favoriteSheet=unzipStored(b.downloads.at(-1).content)['xl/worksheets/sheet1.xml'];assert(favoriteSheet.includes('autoFilter ref="A1:F2"'));
  b.run('CodeLibrary.clearSearch()');
  b.run('CodeLibrary.edit('+JSON.stringify(secondId)+')');
@@ -135,7 +188,8 @@ async function main(){
  b.run('CodeLibrary.detail('+JSON.stringify(firstId)+')');assert(b.$('modalBody').innerHTML.includes('Needle'));
  b.run('CodeLibrary.search("needle");CodeLibrary.excel(true)');assert(b.downloads.at(-1).name.endsWith('.xlsx'));
  const reloaded=boot({storage:b.storage});reloaded.run('CodeLibrary.render()');assert(reloaded.$('codeResults').innerHTML.includes('แก้ไขชื่อ'));
- assert(reloaded.$('codeFavorites').innerHTML.includes('Z09'));
+ assert(!reloaded.$('codeFavorites').innerHTML.includes('code-favorite-shortcuts'));
+ reloaded.run('CodeLibrary.favorites()');assert(reloaded.$('codeFavorites').innerHTML.includes('Z09'));
  reloaded.run('CodeLibrary.files()');assert(reloaded.$('modalBody').innerHTML.includes('CodeLibrary.cloud()'));assert(reloaded.$('modalBody').innerHTML.includes('คนละบัญชี'));
  b.run('CodeLibrary.remove('+JSON.stringify(firstId)+')');assert.equal(JSON.parse(b.storage.get(LOCAL)).records.length,2,'delete prompt is reversible');
  b.run('CodeLibrary.confirmRemove('+JSON.stringify(firstId)+')');assert.equal(JSON.parse(b.storage.get(LOCAL)).records.length,1);
@@ -159,6 +213,40 @@ async function main(){
  assert.equal(JSON.parse(quota.downloads.at(-1).content).records[0].note,'must survive without storage');
  assert(quota.messages.some(m=>m.includes('บันทึกคลังปัจจุบัน')),'switching cannot discard memory-only edits');
  let warned=false;quota.events.beforeunload({preventDefault(){warned=true}});assert(warned);
+
+ // Bulk deletion requires confirmation until the current library has a JSON backup.
+ const deletion=boot({storage:new Map([[LOCAL,serialized([row('A01'),row('B01'),row('C01')])],['schedule-sentinel','keep shifts']])});
+ deletion.run('CodeLibrary.category("A");CodeLibrary.files();CodeLibrary.removeAll()');
+ assert.equal(deletion.$('modalTitle').textContent,'ลบโค้ดรหัสทั้งหมด');
+ assert(deletion.$('modalBody').innerHTML.includes('3 รายการ'));
+ assert.equal(JSON.parse(deletion.storage.get(LOCAL)).records.length,3);
+ deletion.run('CodeLibrary.cancelRemoveAll();CodeLibrary.confirmRemoveAll()');assert.equal(JSON.parse(deletion.storage.get(LOCAL)).records.length,3);
+ deletion.run('CodeLibrary.excel(false);CodeLibrary.removeAll()');assert.equal(JSON.parse(deletion.storage.get(LOCAL)).records.length,3,'Excel does not substitute for JSON backup');
+ deletion.run('CodeLibrary.confirmRemoveAll()');assert.equal(JSON.parse(deletion.storage.get(LOCAL)).records.length,0);
+ assert.equal(deletion.storage.get('schedule-sentinel'),'keep shifts');
+ assert.equal(deletion.$('codeCount').textContent,'พบ 0 จาก 0 รหัส');
+ deletion.run('CodeLibrary.files()');assert(deletion.$('modalBody').innerHTML.includes('onclick="CodeLibrary.removeAll()" disabled'));
+ const backed=boot({storage:new Map([[LOCAL,serialized([row('A01'),row('B01')])]])});
+ backed.run('CodeLibrary.files();CodeLibrary.backup()');
+ const beforeDeleteBackup=JSON.parse(backed.downloads.at(-1).content);
+ assert(backed.$('codeBackupStatus').textContent.includes('ล่าสุดแล้ว'));
+ backed.run('CodeLibrary.removeAll()');assert.equal(JSON.parse(backed.storage.get(LOCAL)).records.length,0,'latest JSON backup allows direct deletion');
+ assert.equal(model.parseBackup(beforeDeleteBackup).length,2);
+ const edited=boot({storage:new Map([[LOCAL,serialized([row('A01')])]])});
+ edited.run('CodeLibrary.backup()');edited.form(row('B01'));edited.run('CodeLibrary.save("");CodeLibrary.removeAll()');
+ assert.equal(JSON.parse(edited.storage.get(LOCAL)).records.length,2,'edits invalidate an older backup');
+ edited.run('CodeLibrary.backup()');assert.equal(JSON.parse(edited.storage.get(LOCAL)).records.length,2,'backup from warning does not itself delete');
+ edited.run('CodeLibrary.confirmRemoveAll()');assert.equal(JSON.parse(edited.storage.get(LOCAL)).records.length,0);
+ const failedBackup=boot({storage:new Map([[LOCAL,serialized([row('A01')])]])});
+ failedBackup.ctx.download=()=>{throw Error('download failed')};failedBackup.run('CodeLibrary.backup();CodeLibrary.removeAll()');
+ assert.equal(JSON.parse(failedBackup.storage.get(LOCAL)).records.length,1,'failed download cannot skip confirmation');
+ const conflicted=boot({storage:new Map([[LOCAL,serialized([row('A01')])]])});
+ conflicted.run('CodeLibrary.removeAll()');conflicted.storage.set(LOCAL,serialized([row('B01')]));conflicted.run('CodeLibrary.confirmRemoveAll()');
+ assert.equal(JSON.parse(conflicted.storage.get(LOCAL)).records[0].code,'B01','another tab cannot be erased by a stale confirmation');
+ const accountKey='shiftplanner-codes-account:test';
+ const scoped=boot({storage:new Map([[LOCAL,serialized([row('A01')])],[accountKey,serialized([row('A01')])],['shiftplanner-codes-active-v1',accountKey]])});
+ scoped.run('CodeLibrary.backup();CodeLibrary.local();CodeLibrary.removeAll()');assert.equal(JSON.parse(scoped.storage.get(LOCAL)).records.length,1,'backup is scoped to its library');
+ scoped.run('CodeLibrary.confirmRemoveAll()');assert.equal(JSON.parse(scoped.storage.get(accountKey)).records.length,1);
 
  // Mock REST endpoints enforce optimistic revisions exactly as the SQL contract.
  const cloud={revision:0,records:[]},calls=[];let fail=false,expire=false;

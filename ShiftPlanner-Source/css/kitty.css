@@ -131,29 +131,35 @@ dialog:has(.code-form) button.primary,dialog:has(.code-file-menu) button.primary
 .code-kind-conditions:has(input:checked){background:#ffe8f0;border-color:#e7a5bf}
 .code-kind-procedures:has(input:checked){background:#e4f5f2;border-color:#9dccbf;color:#367b6a}
 .code-kind-note:has(input:checked){background:#fff2d5;border-color:#e6cb89;color:#957130}
-.code-results-heading{border-top:0;padding-top:20px;padding-bottom:12px}
-.code-card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-.code-card-grid .code-card{display:flex;flex-direction:column;margin:0;padding:19px;border-radius:18px;min-width:0;box-shadow:0 4px 12px #8f526510}
-.code-card-grid .code-card-head{align-items:center;min-height:44px}
-.code-card-grid .code-badge{border:0;background:none;padding:0;font-size:29px;line-height:1.4;letter-spacing:.2px;color:#754655}
-.code-card-grid h3{font-size:16px;line-height:1.7;margin:9px 0 12px;min-height:3.4em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex:none}
-#codesView .code-star{display:flex;align-items:center;justify-content:center;width:39px;height:39px;padding:8px;border:0;border-radius:10px;background:#fcf7ed;color:#b89b68}
+.code-results-heading{border-top:0;padding-top:8px;padding-bottom:8px;flex-wrap:wrap;gap:6px 12px}
+.code-results-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 12px;margin-left:auto}
+.code-results-heading .code-pager{margin:0;gap:8px}
+.code-results-heading .code-pager button{padding:6px 10px;min-height:34px}
+.code-results-heading .code-pager select{padding:4px 7px;min-width:52px;min-height:34px}
+#codePagination:empty{display:none}
+.code-card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.code-card-grid .code-card{display:flex;flex-direction:column;gap:8px;margin:0;padding:12px;border-radius:14px;min-width:0;box-shadow:0 4px 12px #8f526510}
+.code-card-grid .code-card-head{align-items:center;min-height:42px;gap:8px;flex-wrap:nowrap}
+.code-card-grid .code-card-title{display:flex;align-items:center;gap:9px;flex:1;min-width:0;flex-wrap:nowrap}
+.code-card-grid .code-badge{border:0;background:none;padding:0;margin:0;flex-shrink:0;font-size:23px;line-height:1.4;letter-spacing:.2px;color:#754655}
+.code-card-grid h3{font-size:14px;line-height:1.5;margin:0;min-width:0;min-height:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex:1}
+#codesView .code-star{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:32px;height:32px;padding:6px;border:0;border-radius:9px;background:#fcf7ed;color:#b89b68}
 #codesView .code-star:hover{background:#fff1cc}
 #codesView .code-star.is-favorite{color:#b8831e;background:#fff0c7}
 .code-star .code-icon{width:22px;height:22px}
 .code-star.is-favorite .code-icon{fill:#f4c35b}
-.code-tags{display:flex;gap:6px;flex-wrap:wrap;min-height:27px;align-items:start}
-.code-tag{display:inline-flex;align-items:center;gap:4px;border-radius:7px;padding:4px 6px;font-size:10px;white-space:nowrap;font-weight:500}
+.code-tags{display:flex;gap:5px;flex-wrap:wrap;min-height:23px;align-items:start}
+.code-tag{display:inline-flex;align-items:center;gap:4px;border-radius:7px;padding:3px 5px;font-size:10px;white-space:nowrap;font-weight:500}
 .code-tag .code-icon{width:11px;height:11px}
 .code-tag-conditions{background:#ffe6ef;color:#a44d71}
 .code-tag-procedures{background:#e2f4ee;color:#397966}
 .code-tag-note{background:#fff0ce;color:#9b7832}
 .code-tag-empty{font-size:11px;color:#b09aa6;padding-top:5px}
-.code-card-preview{font-size:12px;color:#a18292;line-height:1.8;margin:13px 0 17px;min-height:3.6em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.code-card-preview{display:none}
 .code-card-foot{display:flex;align-items:center;gap:7px;margin-top:auto}
-#codesView .code-detail-button{flex:1;min-width:0;min-height:42px;padding:9px 10px;display:flex;justify-content:space-between;align-items:center;font-size:12px;border-radius:10px}
+#codesView .code-detail-button{flex:1;min-width:0;min-height:34px;padding:5px 8px;display:flex;justify-content:space-between;align-items:center;font-size:12px;border-radius:9px}
 .code-detail-button .code-icon{width:14px;height:14px}
-#codesView .code-icon-button{display:flex;align-items:center;justify-content:center;width:38px;height:42px;padding:9px;flex-shrink:0;background:#f4edf9;border-color:#e5d8ee;border-radius:10px;color:#9472a8}
+#codesView .code-icon-button{display:flex;align-items:center;justify-content:center;width:34px;height:34px;padding:7px;flex-shrink:0;background:#f4edf9;border-color:#e5d8ee;border-radius:9px;color:#9472a8}
 #codesView .code-icon-button.code-delete{background:#fff0f3;border-color:#f3dce4;color:#b96d83}
 .code-detail-view .code-detail-title{display:flex;align-items:start;gap:14px;flex-wrap:wrap}
 .code-detail-view .code-badge{font-size:23px;line-height:1.5;color:#b44370;font-weight:700;flex-shrink:0}
@@ -188,9 +194,9 @@ dialog:has(.code-detail-view) button.primary{background:#c83f70;color:#fff;borde
  #codesView .code-filter-panel .code-alphabet button{min-width:0;min-height:47px}
  .code-filter-panel .code-alphabet button:nth-child(22){grid-column:2}
  .code-kind-option{flex:0 1 auto;padding:7px 9px;font-size:11px}.code-kind p{font-size:9px}
- .code-card-grid{grid-template-columns:1fr;gap:13px}.code-card-grid .code-card{padding:18px}
- .code-card-grid h3{min-height:0;font-size:17px}.code-card-preview{min-height:0;-webkit-line-clamp:1;margin-bottom:15px}
- .code-tag{font-size:11px}.code-card-foot{margin-top:0}.code-favorite-shortcuts{width:100%}
+ .code-card-grid{grid-template-columns:1fr;gap:10px}.code-card-grid .code-card{padding:12px}
+ .code-card-grid h3{min-height:0;font-size:14px}
+ .code-card-foot{margin-top:auto}.code-favorite-shortcuts{width:100%}
 }
 @media print{.code-favorites,.code-filter-panel,.code-star,.code-card-foot{display:none!important}.code-card-grid{display:block}.code-card-grid .code-card{margin-bottom:12px}.code-card-preview{display:block;max-height:none}.code-card-grid h3{display:block}}
 @media(prefers-reduced-motion:reduce){#codesView .kitty-motion{display:inline-flex;align-items:center;justify-content:center}}
@@ -198,3 +204,12 @@ dialog:has(.code-detail-view) button.primary{background:#c83f70;color:#fff;borde
 @media(max-width:420px){.code-filter-panel .code-alphabet{grid-template-columns:repeat(6,minmax(0,1fr))}.code-filter-panel .code-alphabet button:nth-child(22){grid-column:auto}.code-filter-panel .code-alphabet button:nth-child(25){grid-column:3}}
 .code-card-preview:empty{display:none}
 .code-file-section h3{margin-bottom:14px}
+.code-delete-section{border-color:#edbccb;background:#fff6f8}.code-file-section #codeBackupStatus{margin:12px 0 0}
+.code-sync-section,.code-delete-section{display:flex;flex-direction:column;align-items:flex-start}
+.code-sync-section>button,.code-delete-section>button{align-self:flex-end;max-width:100%}
+dialog button.code-danger-button,.code-danger-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:#ffe4ee;color:#9f3257;border-color:#e8adc2}
+dialog button.code-danger-button:hover,.code-danger-button:hover{background:#ffd3e3;color:#872345;border-color:#d990ad}.code-danger-button .code-icon{width:16px;height:16px}
+.nav .nav-chat{display:inline-flex;align-items:center;justify-content:center;gap:8px}.nav-chat-icon{width:19px;height:19px;flex-shrink:0}
+.help-mode-tabs{display:flex;flex-shrink:0;gap:6px;padding:10px 20px;background:#fff;border-bottom:1px solid #ece3f5}.help-mode-tabs button{flex:1;padding:8px 12px;border-radius:10px;border:1px solid #ecd8e2;background:#fff8fb;color:#8b6075;font-size:14px}.help-mode-tabs button[aria-pressed=true]{background:#f9e4ee;border-color:#d89bb5;color:#923d64;font-weight:600}
+.help-disease-result{margin-top:10px;border:1px solid #eadbe8;border-radius:10px;background:#fffafb}.help-disease-result summary{padding:9px 11px;cursor:pointer;overflow-wrap:anywhere}.help-disease-result summary b{margin-right:8px;color:#ae3c68}.help-disease-result dl{margin:0;padding:0 11px 10px}.help-disease-result dl>div{margin-top:8px}.help-disease-result dt{font-size:12px;font-weight:600;color:#9a5c79}.help-disease-result dd{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.help-chat-modal .help-show-results{margin-top:12px;padding:7px 11px;background:#f3eaf9;border-color:#decbeb;color:#77518f;font-size:13px;border-radius:9px}

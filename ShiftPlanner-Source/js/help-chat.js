@@ -1,4 +1,4 @@
-/* Local action chat: add or cancel shift dates and a person's OFF/VAC days. */
+/* Local assistant: search the active code library and manage shift/leave dates. */
 const CHAT_MONTH_NAMES=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 const CHAT_MONTH_SHORT=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const CHAT_MONTH_CASUAL=['มกรา','กุมภา','มีนา','เมษา','พฤษภา','มิถุนา','กรกฎา','สิงหา','กันยา','ตุลา','พฤศจิกา','ธันวา'];
@@ -9,6 +9,7 @@ const CHAT_ACTIONS=[
  {id:'vac',label:'Vac',topic:'Vac',code:'VAC',kind:'leave'}
 ];
 let helpMessages=[],outreachChat={step:'idle',operation:'add',action:'outreach',month:'',pid:'',daysText:''};
+let helpMode='schedule',helpDiseaseMessages=[];
 function currentChatAction(){return CHAT_ACTIONS.find(a=>a.id===outreachChat.action)||CHAT_ACTIONS[0]}
 function removingChatDays(){return outreachChat.operation==='remove'}
 function chatActionLabel(action){return removingChatDays()?'ยกเลิก '+action.topic:action.label}
@@ -81,15 +82,44 @@ function leaveMonthWithDays(s,month,pid,days,code){
 }
 function outreachChatOpen(){return $('modal').open&&$('modal').classList.contains('help-chat-modal')}
 function helpModal(){
- modal('แชทจัดเวร','<div class="help-chat-intro"><img class="help-chat-avatar" src="img/kitty.webp" alt=""><div><b>ผู้ช่วยจัดเวร</b><small>เลือกเดือน แล้วพิมพ์วันที่ได้เลยค่ะ</small></div><span class="help-chat-badge">พร้อมช่วย</span></div><div id="helpMessages" class="help-messages" role="log" aria-label="บทสนทนาจัดเวร" aria-live="polite" aria-relevant="additions text"></div><div id="helpControls" class="help-controls"></div>','<button class="textbtn" onclick="resetHelpChat()">เริ่มคุยใหม่</button><button class="primary" onclick="closeModal()">กลับไปจัดเวร</button>');
+ modal('ผู้ช่วยพฤกษา','<div class="help-chat-intro"><img class="help-chat-avatar" src="img/kitty.webp" alt=""><div><b>ผู้ช่วยพฤกษา</b><small>'+(helpMode==='diseases'?'ค้นหาโรคและรหัสจากคลังที่เปิดอยู่ค่ะ':'เลือกเดือน แล้วพิมพ์วันที่ได้เลยค่ะ')+'</small></div><span class="help-chat-badge">พร้อมช่วย</span></div><div class="help-mode-tabs" role="group" aria-label="เลือกผู้ช่วย">'+[['diseases','ค้นหาโรค'],['schedule','จัดตารางเวร']].map(([id,label])=>'<button type="button" aria-pressed="'+(helpMode===id)+'" onclick="setHelpMode(\''+id+'\')">'+label+'</button>').join('')+'</div><div id="helpMessages" class="help-messages" role="log" aria-label="บทสนทนาผู้ช่วยพฤกษา" aria-live="polite" aria-relevant="additions text"></div><div id="helpControls" class="help-controls"></div>','<button class="textbtn" onclick="resetHelpChat()">เริ่มคุยใหม่</button><button class="primary" onclick="closeModal()">ปิดแชท</button>');
  $('modal').classList.add('help-chat-modal');
  if(!helpMessages.length)helpMessages.push({side:'guide',text:'สวัสดีค่ะ วันนี้มีอะไรให้ช่วยคะ'});
  renderHelpChat();
 }
-function helpMessageMarkup(message){
- return '<div class="help-message '+(message.side==='user'?'from-user':'from-guide')+'"><span class="help-sender">'+(message.side==='user'?'คุณ':'ผู้ช่วยจัดเวร')+'</span><div class="help-bubble">'+esc(message.text).replace(/\n/g,'<br>')+'</div></div>';
+function helpMessageMarkup(message,index){
+ const matches=(message.matches||[]).map(r=>'<details class="help-disease-result"><summary><b>'+esc(r.code)+'</b><span>'+esc(r.disease)+'</span></summary><dl>'+[['conditions','เงื่อนไข'],['procedures','หัตถการ'],['note','Note']].map(([key,label])=>'<div><dt>'+label+'</dt><dd>'+esc(r[key]||'ไม่ได้ระบุ')+'</dd></div>').join('')+'</dl></details>').join('');
+ const all=message.matches?.length?'<button type="button" class="help-show-results" onclick="openHelpDiseaseResults('+index+')">ดูผลทั้งหมด '+message.total+' รายการในคลัง</button>':'';
+ return '<div class="help-message '+(message.side==='user'?'from-user':'from-guide')+'"><span class="help-sender">'+(message.side==='user'?'คุณ':'ผู้ช่วยพฤกษา')+'</span><div class="help-bubble">'+esc(message.text).replace(/\n/g,'<br>')+matches+all+'</div></div>';
+}
+function setHelpMode(mode){
+ if(!outreachChatOpen()||!['schedule','diseases'].includes(mode))return;
+ helpMode=mode;helpModal();
+}
+function renderDiseaseChat(){
+ if(!helpDiseaseMessages.length)helpDiseaseMessages.push({side:'guide',text:'พิมพ์ชื่อโรคหรือรหัสที่ต้องการค้นหาได้เลยค่ะ'});
+ const log=$('helpMessages');log.innerHTML=helpDiseaseMessages.map(helpMessageMarkup).join('');
+ $('helpControls').innerHTML='<form class="help-action-form" onsubmit="submitDiseaseSearch();return false"><label for="helpDiseaseQuery">ชื่อโรค รหัส หรือคำในรายละเอียด</label><div class="help-input-row"><input id="helpDiseaseQuery" type="search" maxlength="500" placeholder="เช่น ไข้ หรือ A09" autocomplete="off" required><button class="primary" type="submit">ค้นหา</button></div></form>';
+ log.scrollTop=log.scrollHeight;$('helpDiseaseQuery').focus?.({preventScroll:true});
+}
+function submitDiseaseSearch(){
+ if(!outreachChatOpen()||helpMode!=='diseases')return;
+ const raw=$('helpDiseaseQuery').value.trim();if(!raw)return;
+ helpDiseaseMessages.push({side:'user',text:raw});
+ try{
+  const query=raw.replace(/^(?:ช่วย(?:ค้นหา|หา)(?:โรค|รหัส)?|ค้นหา(?:โรค|รหัส)?|หา(?:โรค|รหัส))\s*/u,'').trim();
+  const rows=CodeLibrary.lookup(query);
+  helpDiseaseMessages.push({side:'guide',query,total:rows.length,matches:rows.slice(0,6),text:rows.length?'พบ '+rows.length+' รายการในคลังค่ะ กดแต่ละรายการเพื่อดูรายละเอียดได้เลย'+(rows.length>6?'\nแสดง 6 รายการแรก':''):'ไม่พบรายการที่ตรงกันในคลังที่เปิดอยู่ค่ะ ลองใช้ชื่อโรคบางส่วนหรือรหัสอื่นนะคะ'});
+ }catch(e){helpDiseaseMessages.push({side:'guide',text:e.message||'ค้นหาไม่ได้ กรุณาลองใหม่ค่ะ'})}
+ renderDiseaseChat();
+}
+function openHelpDiseaseResults(index){
+ if(!outreachChatOpen()||helpMode!=='diseases')return;
+ const reply=helpDiseaseMessages[index];if(!reply?.matches?.length)return;
+ CodeLibrary.openSearch(reply.query);
 }
 function renderHelpChat(){
+ if(helpMode==='diseases'){renderDiseaseChat();return}
  const log=$('helpMessages'),controls=$('helpControls'),action=currentChatAction();
  log.innerHTML=helpMessages.map(helpMessageMarkup).join('');
  if(outreachChat.step==='month'){
@@ -169,4 +199,8 @@ function submitOutreachDays(){
  helpMessages.push({side:'user',text:raw},{side:'guide',text:removingChatDays()?cancellation:reply});
  outreachChat.daysText='';renderHelpChat();toast((removingChatDays()?'ยกเลิก':'บันทึก')+action.topic+'แล้ว');
 }
-function resetHelpChat(){helpMessages=[];outreachChat={step:'idle',operation:'add',action:'outreach',month:'',pid:'',daysText:''};helpModal()}
+function resetHelpChat(){
+ if(helpMode==='diseases')helpDiseaseMessages=[];
+ else{helpMessages=[];outreachChat={step:'idle',operation:'add',action:'outreach',month:'',pid:'',daysText:''}}
+ helpModal();
+}

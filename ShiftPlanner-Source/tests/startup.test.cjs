@@ -1,9 +1,9 @@
 // Load browser scripts together: isolated engine tests cannot catch duplicate globals.
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
-function boot(saved=null,standalone=false){
+function boot(saved=null,standalone=false,library=null){
 const elements=new Map();
 const element=id=>{if(!elements.has(id)){const classes=new Set();elements.set(id,{innerHTML:'',value:'',textContent:'',classList:{toggle(name,on){if(on===undefined)on=!classes.has(name);if(on)classes.add(name);else classes.delete(name)},add(name){classes.add(name)},remove(name){classes.delete(name)},contains:name=>classes.has(name)},setAttribute(){},addEventListener(){},querySelectorAll(){return[]},querySelector(){return null},showModal(){this.open=true},close(){this.open=false}})}return elements.get(id)};
-let stored=saved?JSON.stringify(saved):null;const otherStores=new Map();
+let stored=saved?JSON.stringify(saved):null;const otherStores=new Map(library?[['shiftplanner-codes-local-v1',JSON.stringify(library)]]:[]);
 const timers=new Map();let timerId=0;
 const ctx=vm.createContext({console,TextEncoder,document:{getElementById:element,querySelectorAll:()=>[],addEventListener(){}},localStorage:{getItem:key=>key==='card-room-planner-v1'?stored:otherStores.get(key)??null,setItem(key,value){if(key==='card-room-planner-v1')stored=value;else otherStores.set(key,value)}},setTimeout(callback){timers.set(++timerId,callback);return timerId},clearTimeout(id){timers.delete(id)},cancelAnimationFrame(){}});
 const run=x=>vm.runInContext(x,ctx);
@@ -23,6 +23,31 @@ for(const standalone of [false,true]){
  codes.run('view("schedule")');assert(codes.element('codesView').classList.contains('hidden'));
  assert(!codes.element('scheduleView').classList.contains('hidden'));
 }
+for(const standalone of [false,true]){
+ const library={version:1,revision:0,dirty:false,records:[...Array.from({length:8},(_,i)=>({id:'chat-'+i,code:'A0'+(i+1),disease:'ไข้ ทดสอบ '+i,conditions:'เงื่อนไขตัวอย่าง',procedures:'หัตถการตัวอย่าง',note:'needle\nบรรทัดสอง',favorite:false})),{id:'chat-escaped',code:'C99',disease:'<img src=x onerror=alert(1)>',conditions:'',procedures:'',note:'<script>alert(1)</script>',favorite:false}]};
+ const chat=boot(null,standalone,library),scheduleBefore=chat.run('JSON.stringify(state)');
+ chat.run('CodeLibrary.category("Z");helpModal();setHelpMode("diseases")');
+ assert(chat.element('modalBody').innerHTML.includes('ค้นหาโรค'));
+ assert(chat.element('helpControls').innerHTML.includes('id="helpDiseaseQuery"'));
+ chat.element('helpDiseaseQuery').value='ไข้';chat.run('submitDiseaseSearch()');
+ assert.equal(chat.run('helpDiseaseMessages.at(-1).total'),8);
+ assert.equal((chat.element('helpMessages').innerHTML.match(/class="help-disease-result"/g)||[]).length,6);
+ assert(chat.element('helpMessages').innerHTML.includes('เงื่อนไขตัวอย่าง'));
+ chat.run('openHelpDiseaseResults(2)');assert.equal(chat.element('modal').open,false);
+ assert.equal(chat.element('codeCount').textContent,'พบ 8 จาก 9 รหัส');
+ chat.run('helpModal()');chat.element('helpDiseaseQuery').value='ค้นหารหัส A01';chat.run('submitDiseaseSearch()');
+ assert.equal(chat.run('helpDiseaseMessages.at(-1).total'),1);
+ chat.element('helpDiseaseQuery').value='needle';chat.run('submitDiseaseSearch()');assert.equal(chat.run('helpDiseaseMessages.at(-1).total'),8);
+ chat.element('helpDiseaseQuery').value='<img';chat.run('submitDiseaseSearch()');assert.equal(chat.run('helpDiseaseMessages.at(-1).total'),1);
+ assert(chat.element('helpMessages').innerHTML.includes('&lt;img'));assert(!chat.element('helpMessages').innerHTML.includes('<img'));
+ assert(chat.element('helpMessages').innerHTML.includes('&lt;script&gt;'));
+ chat.element('helpDiseaseQuery').value='ไม่มีคำนี้ในคลัง';chat.run('submitDiseaseSearch()');assert.equal(chat.run('helpDiseaseMessages.at(-1).total'),0);
+ chat.run('setHelpMode("schedule");startOutreachChat()');assert.equal(chat.run('outreachChat.step'),'month');
+ chat.run('setHelpMode("diseases");resetHelpChat()');assert.equal(chat.run('helpDiseaseMessages.length'),1);assert.equal(chat.run('outreachChat.step'),'month');
+ chat.run('setHelpMode("schedule")');assert(chat.element('helpControls').innerHTML.includes('type="month"'));
+ assert.equal(chat.run('JSON.stringify(state)'),scheduleBefore,'search and switching modes never change shifts');
+}
+console.log('PASS: disease chat searches the full active library, limits previews, opens all results, escapes notes and preserves scheduling flow in source/standalone');
 const {ctx,run,element}=boot();
 assert.equal(run('Object.keys(activeMonth().cells).length'),0);
 assert(!element('sourceNote').textContent.includes('ต.ค.69'));

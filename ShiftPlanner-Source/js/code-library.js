@@ -5,8 +5,9 @@ const CodeLibrary=(()=>{
  const empty=()=>({version:1,records:[],revision:0,dirty:false});
  // Public project configuration only. Passwords and session tokens are never bundled.
  const defaultConfig=CodeCatalog.config('https://omtcyjoewqtfsreshgfu.supabase.co','sb_publishable_3Ixd4qU4vGBYVRJUqTurSg_vFabVA5B');
- let store=LOCAL,doc=empty(),config=defaultConfig,session=null,loadError='',rawBackup='',storageWarning='',stale=false,busy=false,message='',category='',query='',kind=[],page=1;
- const pageSize=30;
+ let store=LOCAL,doc=empty(),config=defaultConfig,session=null,loadError='',rawBackup='',storageWarning='',stale=false,busy=false,message='',category=[],query='',kind=[],page=1;
+ const backedUpRecords=new Map();let pendingClear=null;
+ const pageSize=12;
  let motionPaused=false,favoritesOnly=false,speechIndex=0,speechTimer;
  const speeches=['สวัสดีคนเก่งของเค้า','สู้ๆนะไอ้อ้วงง','เค้ารักอ้วนที่สุดในโลกเลยย','มากอดหน่อย','คนเก่งของเค้า','หอมแก้มม.'];
  const detailsKinds=[['conditions','มีเงื่อนไข'],['procedures','มีหัตถการ'],['note','มี Note']];
@@ -54,11 +55,21 @@ const CodeLibrary=(()=>{
  }
  function switchStore(next){
   if(storageWarning){persist(doc);if(storageWarning)throw Error('ยังบันทึกคลังปัจจุบันในเครื่องไม่ได้ กรุณาสำรอง JSON ก่อนรีเฟรช แล้วนำเข้าไฟล์สำรองเมื่อมีพื้นที่เพียงพอ')}
-  store=next;doc=read(store);try{localStorage.setItem(ACTIVE,store)}catch{}page=1;category='';query='';kind=[];favoritesOnly=false;message='';
+  store=next;doc=read(store);try{localStorage.setItem(ACTIVE,store)}catch{}page=1;category=[];query='';kind=[];favoritesOnly=false;message='';pendingClear=null;
  }
  function commit(rows){if(busy)throw Error('รอการเชื่อมต่อให้เสร็จก่อน');persist({...doc,records:rows,dirty:true});page=1;render()}
  function error(e){message=e.message||String(e);toast(message);if(currentView==='codes')render()}
  function filtered(){return CodeCatalog.filter(doc.records,category,query,kind).filter(r=>!favoritesOnly||r.favorite)}
+ function lookup(value){
+  if(loadError)throw Error(loadError);
+  const text=String(value??'').trim();if(!text||text.length>500)throw Error('กรุณาพิมพ์ชื่อโรคหรือรหัสไม่เกิน 500 ตัวอักษร');
+  return CodeCatalog.filter(doc.records,[],text,[]).map(r=>({...r}));
+ }
+ function openSearch(value){
+  category=[];kind=[];favoritesOnly=false;query=String(value??'').trim().slice(0,500);page=1;
+  closeModal();view('codes');render();
+  $('codeCount').scrollIntoView?.({block:'start'});
+ }
  function status(){
   if(loadError)return loadError;
   if(storageWarning)return storageWarning;
@@ -78,8 +89,8 @@ const CodeLibrary=(()=>{
    <div class="code-tools"><label class="field code-search"><span>ค้นหาในสมุดโค้ด</span><span class="code-search-box"><span class="code-search-icon">${icon('search')}</span><input id="codeSearch" type="search" placeholder="พิมพ์รหัส ชื่อโรค เงื่อนไข หรือโน้ต…" value="${esc(query)}" oninput="CodeLibrary.search(this.value)"></span></label>
    <fieldset class="code-kind"><legend>รายละเอียดที่ต้องการ</legend><div class="code-kind-options">${detailsKinds.map(([v,t])=>'<label class="code-kind-option code-kind-'+v+'"><input type="checkbox" name="codeKind" value="'+v+'" '+(kind.includes(v)?'checked':'')+' onchange="CodeLibrary.kind(this.value,this.checked)">'+icon(v)+'<span>'+t+'</span></label>').join('')}</div></fieldset></div>
    <div id="codeFavorites" class="code-favorites"></div>
-   <div class="code-filter-panel"><div class="code-category-heading"><span>หมวดรหัส A–Z</span><button class="code-category-all" aria-pressed="${!category}" onclick="CodeLibrary.category('')">ทั้งหมด <span>${doc.records.length}</span></button></div><div class="code-alphabet" role="group" aria-label="หมวดรหัส A ถึง Z">${Object.entries(counts).map(([c,n])=>'<button class="'+(!n?'code-category-empty':'')+'" aria-pressed="'+(category===c)+'" onclick="CodeLibrary.category(\''+c+'\')">'+c+'<small>'+n+'</small></button>').join('')}</div></div>
-   <div class="code-results-heading"><p class="code-count" id="codeCount" role="status"></p><button id="codeClear" class="code-clear${category||query||kind.length||favoritesOnly?'':' hidden'}" onclick="CodeLibrary.clearSearch()">ล้างตัวกรอง ×</button></div><div class="code-results" id="codeResults"></div>
+   <div class="code-filter-panel"><div class="code-category-heading"><span>หมวดรหัส A–Z</span><button class="code-category-all" aria-pressed="${!category.length}" onclick="CodeLibrary.category('')">ทั้งหมด <span>${doc.records.length}</span></button></div><div class="code-alphabet" role="group" aria-label="หมวดรหัส A ถึง Z เลือกได้หลายหมวด">${Object.entries(counts).map(([c,n])=>'<button class="'+(!n?'code-category-empty':'')+'" aria-pressed="'+category.includes(c)+'" onclick="CodeLibrary.category(\''+c+'\')">'+c+'<small>'+n+'</small></button>').join('')}</div></div>
+   <div class="code-results-heading"><p class="code-count" id="codeCount" role="status" tabindex="-1"></p><div class="code-results-actions"><button id="codeClear" class="code-clear${category.length||query||kind.length||favoritesOnly?'':' hidden'}" onclick="CodeLibrary.clearSearch()">ล้างตัวกรอง ×</button><div id="codePagination"></div></div></div><div class="code-results" id="codeResults"></div>
    </div>`;
   renderFavorites();
   renderResults();
@@ -87,19 +98,26 @@ const CodeLibrary=(()=>{
  }
  function renderFavorites(){
   const rows=doc.records.filter(r=>r.favorite);
-  $('codeFavorites').innerHTML='<button class="code-favorites-toggle" aria-pressed="'+favoritesOnly+'" onclick="CodeLibrary.favorites()">'+icon('star')+' รายการโปรด <span>'+rows.length+'</span></button>'+(rows.length?'<div class="code-favorite-shortcuts">'+rows.slice(0,8).map(r=>'<button onclick="CodeLibrary.detail(\''+r.id+'\')" title="'+esc(r.code+' · '+r.disease)+'">'+esc(r.code)+'<span>'+esc(r.disease)+'</span></button>').join('')+'</div>':'');
+  $('codeFavorites').innerHTML='<button class="code-favorites-toggle" aria-pressed="'+favoritesOnly+'" onclick="CodeLibrary.favorites()">'+icon('star')+' รายการโปรด <span>'+rows.length+'</span></button>'+(favoritesOnly&&rows.length?'<div class="code-favorite-shortcuts">'+rows.slice(0,8).map(r=>'<button onclick="CodeLibrary.detail(\''+r.id+'\')" title="'+esc(r.code+' · '+r.disease)+'">'+esc(r.code)+'<span>'+esc(r.disease)+'</span></button>').join('')+'</div>':'');
  }
  function renderResults(){
-  const rows=filtered(),max=Math.max(1,Math.ceil(rows.length/pageSize));page=Math.min(page,max);
-  $('codeCount').textContent='พบ '+rows.length+' จาก '+doc.records.length+' รหัส'+(category?' · หมวด '+category:'');
-  $('codeClear').classList.toggle('hidden',!category&&!query&&!kind.length&&!favoritesOnly);
+  const rows=filtered(),max=Math.max(1,Math.ceil(rows.length/pageSize));page=Math.max(1,Math.min(page,max));
+  $('codeCount').textContent='พบ '+rows.length+' จาก '+doc.records.length+' รหัส'+(category.length?' · หมวด '+category.join(', '):'')+(max>1?' · แสดง '+((page-1)*pageSize+1)+'–'+Math.min(page*pageSize,rows.length):'');
+  $('codeClear').classList.toggle('hidden',!category.length&&!query&&!kind.length&&!favoritesOnly);
   const cards=rows.slice((page-1)*pageSize,page*pageSize).map(r=>`<article class="code-card" data-entry="${r.id}">
-   <div class="code-card-head"><span class="code-badge">${esc(r.code)}</span><button class="code-star${r.favorite?' is-favorite':''}" onclick="CodeLibrary.favorite('${r.id}')" aria-pressed="${r.favorite}" aria-label="${r.favorite?'นำออกจาก':'เพิ่มใน'}รายการโปรด ${esc(r.code+' '+r.disease)}" ${busy||loadError?'disabled':''}>${icon('star')}</button></div>
-   <h3>${esc(r.disease)}</h3><div class="code-tags">${detailsKinds.filter(([k])=>r[k]).map(([k,t])=>'<span class="code-tag code-tag-'+k+'">'+icon(k)+t+'</span>').join('')||'<span class="code-tag-empty">ยังไม่มีรายละเอียดเพิ่มเติม</span>'}</div>
+   <div class="code-card-head"><div class="code-card-title"><span class="code-badge">${esc(r.code)}</span><h3>${esc(r.disease)}</h3></div><button class="code-star${r.favorite?' is-favorite':''}" onclick="CodeLibrary.favorite('${r.id}')" aria-pressed="${r.favorite}" aria-label="${r.favorite?'นำออกจาก':'เพิ่มใน'}รายการโปรด ${esc(r.code+' '+r.disease)}" ${busy||loadError?'disabled':''}>${icon('star')}</button></div>
+   <div class="code-tags">${detailsKinds.filter(([k])=>r[k]).map(([k,t])=>'<span class="code-tag code-tag-'+k+'">'+icon(k)+t+'</span>').join('')||'<span class="code-tag-empty">ยังไม่มีรายละเอียดเพิ่มเติม</span>'}</div>
    <p class="code-card-preview">${esc((r.note||r.conditions||r.procedures||'').slice(0,110))}</p>
    <div class="code-card-foot"><button class="primary code-detail-button" onclick="CodeLibrary.detail('${r.id}')">ดูรายละเอียด ${icon('arrow')}</button><button class="code-icon-button" onclick="CodeLibrary.edit('${r.id}')" aria-label="แก้ไข ${esc(r.code+' '+r.disease)}" title="แก้ไขรายการ" ${busy?'disabled':''}>${icon('edit')}</button><button class="code-icon-button code-delete" onclick="CodeLibrary.remove('${r.id}')" aria-label="ลบ ${esc(r.code+' '+r.disease)}" title="ลบรายการ" ${busy?'disabled':''}>${icon('trash')}</button></div>
   </article>`).join('');
-  $('codeResults').innerHTML=rows.length?'<div class="code-card-grid">'+cards+'</div>'+(max>1?`<div class="code-pager"><button onclick="CodeLibrary.page(-1)" ${page===1?'disabled':''}>‹ ก่อนหน้า</button><span>หน้า ${page} / ${max}</span><button onclick="CodeLibrary.page(1)" ${page===max?'disabled':''}>ถัดไป ›</button></div>`:''):`<div class="code-empty"><div class="kitty-empty-icon" aria-hidden="true"><span class="kitty-bow"></span>${icon('heart','code-heart')}</div><h3>${doc.records.length?'ไม่พบรหัส':'ยังไม่มีรหัส'}</h3>${doc.records.length?'<button onclick="CodeLibrary.clearSearch()">ดูรหัสทั้งหมด</button>':''}</div>`;
+  $('codePagination').innerHTML=max>1?`<nav class="code-pager" aria-label="เปลี่ยนหน้ารหัส"><button onclick="CodeLibrary.page(-1)" aria-keyshortcuts="ArrowLeft" title="ก่อนหน้า (ปุ่มลูกศรซ้าย ←)" ${page===1?'disabled':''}>‹ ก่อนหน้า</button><label>หน้า <select aria-label="เลือกหน้ารหัส" onchange="CodeLibrary.goToPage(Number(this.value))">${Array.from({length:max},(_,i)=>'<option value="'+(i+1)+'" '+(page===i+1?'selected':'')+'>'+(i+1)+'</option>').join('')}</select> / ${max}</label><button onclick="CodeLibrary.page(1)" aria-keyshortcuts="ArrowRight" title="ถัดไป (ปุ่มลูกศรขวา →)" ${page===max?'disabled':''}>ถัดไป ›</button></nav>`:'';
+  $('codeResults').innerHTML=rows.length?'<div class="code-card-grid">'+cards+'</div>':`<div class="code-empty"><div class="kitty-empty-icon" aria-hidden="true"><span class="kitty-bow"></span>${icon('heart','code-heart')}</div><h3>${doc.records.length?'ไม่พบรหัส':'ยังไม่มีรหัส'}</h3>${doc.records.length?'<button onclick="CodeLibrary.clearSearch()">ดูรหัสทั้งหมด</button>':''}</div>`;
+ }
+ function goToPage(value){
+  if(!Number.isInteger(value))return;
+  const next=Math.max(1,Math.min(value,Math.max(1,Math.ceil(filtered().length/pageSize))));if(next===page)return;
+  page=next;renderResults();
+  const heading=$('codeCount');heading.focus({preventScroll:true});heading.scrollIntoView?.({block:'start'});
  }
  function detail(id){
   const r=doc.records.find(x=>x.id===id);if(!r)return;
@@ -111,7 +129,7 @@ const CodeLibrary=(()=>{
  }
  function edit(id=''){
   if(busy||loadError)return;
-  const r=doc.records.find(x=>x.id===id)||{code:category||'A',disease:'',conditions:'',procedures:'',note:''};
+  const r=doc.records.find(x=>x.id===id)||{code:category.length===1?category[0]:'A',disease:'',conditions:'',procedures:'',note:''};
   if(id&&!r.id){toast('ไม่พบรายการนี้ กรุณาเปิดใหม่');return}
   modal(id?'แก้ไขรหัส '+r.code:'เพิ่มโค้ดรหัส',`<form id="codeForm" class="code-form" onsubmit="event.preventDefault();CodeLibrary.save('${id}')"><div class="code-form-grid"><label class="field">หมวด<select id="codeLetter">${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c=>'<option '+(c===r.code[0]?'selected':'')+'>'+c+'</option>').join('')}</select></label><label class="field">เลขหลังหมวด<input id="codeNumber" required maxlength="31" inputmode="decimal" pattern="[0-9]+([.][0-9]+)?" value="${esc(r.code.slice(1))}" placeholder="เช่น 00 หรือ 00.1"></label></div><label class="field">ชื่อโรค<input id="codeDisease" required maxlength="500" value="${esc(r.disease)}" placeholder="กรอกชื่อโรค"></label>${[['conditions','เงื่อนไข'],['procedures','หัตถการ'],['note','Note เพิ่มเติม']].map(([k,label])=>'<label class="field">'+label+' <small>(ไม่บังคับ)</small><textarea id="code-'+k+'" maxlength="8000" rows="3">'+esc(r[k])+'</textarea></label>').join('')}<p id="codeFormError" class="code-message" role="alert"></p><p class="help">ใช้รหัสและเลขซ้ำกันได้ แต่ละรายการแก้ไขหรือลบแยกกันได้</p></form>`,'<button onclick="closeModal()">ยกเลิก</button><button class="primary" type="submit" form="codeForm">บันทึกรหัส</button>');
   $('codeNumber').focus();
@@ -126,12 +144,41 @@ const CodeLibrary=(()=>{
  }
  function remove(id){if(busy)return;const r=doc.records.find(x=>x.id===id);if(!r)return;modal('ลบรหัส '+r.code,'<p>ลบรายการ <b>'+esc(r.code)+' · '+esc(r.disease)+'</b> ออกจากคลังนี้หรือไม่?</p><p class="help">ลบเฉพาะรายการนี้ รายการอื่นที่ใช้รหัสเดียวกันยังอยู่</p>','<button onclick="closeModal()">ยกเลิก</button><button onclick="CodeLibrary.confirmRemove(\''+r.id+'\')">ลบรายการนี้</button>')}
  function confirmRemove(id){try{commit(doc.records.filter(r=>r.id!==id));closeModal();toast('ลบรายการแล้ว')}catch(e){error(e)}}
- function files(){modal('จัดการสมุดโค้ดของฉัน',`<div class="code-file-menu">
+ function hasCurrentBackup(){return backedUpRecords.get(store)===JSON.stringify(doc.records)}
+ function backupStatus(){return hasCurrentBackup()?'ดาวน์โหลดสำรอง JSON ของข้อมูลล่าสุดแล้ว':'ยังไม่ได้สำรอง JSON ล่าสุดในการเปิดหน้านี้'}
+ function files(){pendingClear=null;modal('จัดการสมุดโค้ดของฉัน',`<div class="code-file-menu">
   <section class="code-file-section"><h3>ส่งออก Excel</h3><div class="code-export-row"><label class="field">รายการที่ต้องการ<select id="codeExportScope"><option value="all">ทั้งคลัง · ${doc.records.length} รายการ</option><option value="filtered">ผลค้นหาปัจจุบัน · ${filtered().length} รายการ</option></select></label><button class="primary" onclick="CodeLibrary.excel(document.getElementById('codeExportScope').value==='filtered')">ดาวน์โหลด Excel</button></div></section>
-  <section class="code-file-section"><h3>สำรองและนำกลับมาใช้</h3><div class="code-file-actions"><button onclick="CodeLibrary.backup()">สำรอง JSON</button><button onclick="document.getElementById('codeImport').click()" ${busy||loadError?'disabled':''}>นำเข้า JSON</button></div></section>
+  <section class="code-file-section"><h3>สำรองและนำกลับมาใช้</h3><div class="code-file-actions"><button onclick="CodeLibrary.backup()">สำรอง JSON</button><button onclick="document.getElementById('codeImport').click()" ${busy||loadError?'disabled':''}>นำเข้า JSON</button></div><p id="codeBackupStatus" role="status">${backupStatus()}</p></section>
   <section class="code-file-section code-sync-section"><h3>${icon('cloud')} ซิงก์ข้ามเครื่อง</h3><p>${esc(status())}</p><p>การบันทึกในเบราว์เซอร์ยังไม่ใช่การส่งขึ้นออนไลน์ ต้องเข้าสู่ระบบแล้วกดส่งหรือโหลดข้อมูล คลังออนไลน์แยกตามบัญชี คนละบัญชีจะยังไม่เห็นคลังร่วมกัน</p><button onclick="CodeLibrary.cloud()" ${busy?'disabled':''}>เข้าสู่ระบบ / ส่งและโหลดข้อมูล</button></section>
+  <section class="code-file-section code-delete-section"><h3>ลบโค้ดรหัสทั้งหมด</h3><p>ลบทั้งคลังที่เปิดอยู่ ${doc.records.length} รายการ รวมหมวดที่ไม่ได้เลือก โดยไม่ลบตารางเวร</p><button class="code-danger-button" onclick="CodeLibrary.removeAll()" ${busy||loadError||!doc.records.length?'disabled':''}>${icon('trash')} ลบโค้ดรหัสทั้งหมด</button></section>
   ${store!==LOCAL?'<button class="code-local-link" onclick="CodeLibrary.local()" '+(busy?'disabled':'')+'>เปิดสมุดที่บันทึกในเครื่อง</button>':''}<input id="codeImport" type="file" accept=".json,application/json" class="hidden" onchange="CodeLibrary.importFile(this)">${loadError?'<p class="code-message">'+esc(loadError)+'</p><button onclick="CodeLibrary.recover()">ดาวน์โหลดข้อมูลเดิมและเริ่มคลังใหม่</button>':''}</div>`)}
- function backup(){download(JSON.stringify(CodeCatalog.backup(doc.records),null,2),'CodeLibrary-'+new Date().toISOString().slice(0,10)+'.json','application/json')}
+ function backup(){
+  try{
+   download(JSON.stringify(CodeCatalog.backup(doc.records),null,2),'CodeLibrary-'+new Date().toISOString().slice(0,10)+'.json','application/json');
+   backedUpRecords.set(store,JSON.stringify(doc.records));
+   for(const id of ['codeBackupStatus','codeDeleteBackupStatus']){const label=$(id);if(label)label.textContent=backupStatus()}
+   return true;
+  }catch(e){error(e);return false}
+ }
+ function removeAll(){
+  if(busy||loadError||!doc.records.length)return;
+  pendingClear={store,records:JSON.stringify(doc.records)};
+  if(hasCurrentBackup()){clearAll();return}
+  modal('ลบโค้ดรหัสทั้งหมด',`<p id="codeDeleteBackupStatus" role="status">${backupStatus()}</p><p>ยืนยันลบโค้ดรหัสทั้งหมด <b>${doc.records.length} รายการ</b> จากคลังที่เปิดอยู่หรือไม่?</p><p class="help">กู้คืนได้ด้วยการนำเข้าไฟล์สำรอง JSON เท่านั้น ตารางเวรยังอยู่เหมือนเดิม</p>`,'<button onclick="CodeLibrary.cancelRemoveAll()">ยกเลิก</button><button onclick="CodeLibrary.backup()">สำรอง JSON ก่อน</button><button class="code-danger-button" onclick="CodeLibrary.confirmRemoveAll()">ยืนยันลบทั้งหมด</button>');
+ }
+ function cancelRemoveAll(){pendingClear=null;closeModal()}
+ function confirmRemoveAll(){if(!$('modal').open||$('modalTitle').textContent!=='ลบโค้ดรหัสทั้งหมด')return;clearAll()}
+ function clearAll(){
+  if(busy||loadError||!pendingClear||!doc.records.length)return;
+  const expected=pendingClear;pendingClear=null;
+  if(expected.store!==store||expected.records!==JSON.stringify(doc.records)){error(Error('ข้อมูลเปลี่ยนระหว่างรอยืนยัน กรุณากดลบทั้งหมดใหม่'));return}
+  try{
+   const count=doc.records.length;
+   persist({...doc,records:[],dirty:true});backedUpRecords.delete(store);
+   category=[];query='';kind=[];favoritesOnly=false;page=1;message='';render();closeModal();
+   toast('ลบโค้ดรหัสแล้ว '+count+' รายการ'+(storageWarning?' · '+storageWarning:''));
+  }catch(e){error(e)}
+ }
  function excel(only){const rows=only?filtered():doc.records;try{download(CodeCatalog.xlsx(rows),'CodeLibrary-'+(only?'filtered-':'')+new Date().toISOString().slice(0,10)+'.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');toast('ส่งออก Excel '+rows.length+' รหัสแล้ว')}catch(e){error(e)}}
  async function importFile(input){
   const file=input.files[0];input.value='';if(!file||busy)return;
@@ -236,6 +283,12 @@ const CodeLibrary=(()=>{
   download(rawBackup,'CodeLibrary-recovery-'+Date.now()+'.json','application/json');
   loadError='';persist(empty());closeModal();render();
  }
+ window.addEventListener('keydown',e=>{
+  if(currentView!=='codes'||e.defaultPrevented||e.isComposing||e.altKey||e.ctrlKey||e.metaKey||e.shiftKey||$('modal').open)return;
+  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
+  if(e.target?.isContentEditable||e.target?.closest?.('input,textarea,select,[contenteditable],[role="textbox"],[role="combobox"],[role="slider"]'))return;
+  e.preventDefault();goToPage(page+(e.key==='ArrowRight'?1:-1));
+ });
  window.addEventListener('beforeunload',e=>{if(storageWarning||busy){e.preventDefault();e.returnValue=''}});
  window.addEventListener('storage',e=>{
   if(e.key!==store)return;
@@ -244,6 +297,6 @@ const CodeLibrary=(()=>{
   if(currentView==='codes')render();
  });
  if(currentView==='codes')render();
- return {render,edit,save,remove,confirmRemove,files,backup,excel,importFile,cloud,login,push,pullPrompt,pull,copyLocal,logout,local,recover,confirmRecover,motion,nextSpeech,suspend,detail,favorite,
-  favorites(){favoritesOnly=!favoritesOnly;page=1;renderFavorites();renderResults()},search(v){query=v;page=1;renderResults()},kind(v,checked){if(!['conditions','procedures','note'].includes(v))return;kind=kind.filter(k=>k!==v);if(checked)kind.push(v);page=1;renderResults()},category(v){category=v;page=1;render()},page(delta){page+=delta;renderResults()},clearSearch(){category='';query='';kind=[];favoritesOnly=false;page=1;render()}};
+ return {render,edit,save,remove,confirmRemove,files,backup,excel,importFile,cloud,login,push,pullPrompt,pull,copyLocal,logout,local,recover,confirmRecover,motion,nextSpeech,suspend,detail,favorite,goToPage,removeAll,confirmRemoveAll,cancelRemoveAll,lookup,openSearch,
+  favorites(){favoritesOnly=!favoritesOnly;page=1;renderFavorites();renderResults()},search(v){query=v;page=1;renderResults()},kind(v,checked){if(!['conditions','procedures','note'].includes(v))return;kind=kind.filter(k=>k!==v);if(checked)kind.push(v);page=1;renderResults()},category(v){if(v==='')category=[];else if(/^[A-Z]$/.test(v))category=category.includes(v)?category.filter(c=>c!==v):[...category,v].sort();else return;page=1;render()},page(delta){goToPage(page+delta)},clearSearch(){category=[];query='';kind=[];favoritesOnly=false;page=1;render()}};
 })();
