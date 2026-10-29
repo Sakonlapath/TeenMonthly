@@ -72,6 +72,13 @@ const CodeCatalog = (() => {
   if(!publicKey)throw Error('ใช้ Publishable key หรือ anon key เท่านั้น ห้ามใช้ secret / service_role');
   return {url,key};
  }
+ function loginIdentity(username,url){
+  const name=String(username??'').trim().toLowerCase();
+  if(!/^[a-z][a-z0-9._-]{2,31}$/.test(name))throw Error('Username ใช้ตัวอักษรอังกฤษขึ้นต้น ตามด้วยตัวอักษร ตัวเลข . _ - รวม 3–32 ตัว');
+  const match=/^https:\/\/([a-z0-9-]+\.supabase\.co)\/?$/.exec(url);
+  if(!match)throw Error('Project URL ไม่ถูกต้อง');
+  return {username:name,email:name+'@'+match[1]};
+ }
  function xlsx(rows){
   rows=records(rows);
   const headers=['หมวด','รหัส','ชื่อโรค','เงื่อนไข','หัตถการ','Note'];
@@ -88,5 +95,5 @@ const CodeCatalog = (() => {
    'xl/styles.xml':'<styleSheet xmlns="'+main+'"><fonts count="2"><font><sz val="12"/><name val="Tahoma"/></font><font><b/><sz val="12"/><name val="Tahoma"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
   });
  }
- return {records,filter,upsert,merge,backup,parseBackup,document,config,xlsx,MAX_BYTES};
+ return {records,filter,upsert,merge,backup,parseBackup,document,config,loginIdentity,xlsx,MAX_BYTES};
 })();

@@ -7,7 +7,7 @@ const CodeLibrary=(()=>{
  const defaultConfig=CodeCatalog.config('https://omtcyjoewqtfsreshgfu.supabase.co','sb_publishable_3Ixd4qU4vGBYVRJUqTurSg_vFabVA5B');
  let store=LOCAL,doc=empty(),config=defaultConfig,session=null,loadError='',rawBackup='',storageWarning='',stale=false,busy=false,message='',category=[],query='',kind=[],page=1;
  const backedUpRecords=new Map();let pendingClear=null;
- let loginEmail='';
+ let loginUsername='teen';
  const pageSize=12;
  let motionPaused=false,favoritesOnly=false,speechIndex=0,speechTimer;
  const speeches=['สวัสดีคนเก่งของเค้า','สู้ๆนะไอ้อ้วงง','เค้ารักอ้วนที่สุดในโลกเลยย','มากอดหน่อย','คนเก่งของเค้า','หอมแก้มม.'];
@@ -75,12 +75,12 @@ const CodeLibrary=(()=>{
   if(loadError)return loadError;
   if(storageWarning)return storageWarning;
   if(store===LOCAL)return 'บันทึกเฉพาะเครื่องนี้ · '+doc.records.length+' รายการ';
-  return (session?'คลังบัญชี '+session.user.email:'คลังบัญชีที่เคยเปิด · ยังไม่ได้เข้าสู่ระบบ')+' · '+(doc.dirty?'มีข้อมูลรอส่งออนไลน์':'ข้อมูลที่โหลดไว้ รุ่น '+doc.revision);
+  return (session?'คลังบัญชี '+session.username:'คลังบัญชีที่เคยเปิด · ยังไม่ได้เข้าสู่ระบบ')+' · '+(doc.dirty?'มีข้อมูลรอส่งออนไลน์':'ข้อมูลที่โหลดไว้ รุ่น '+doc.revision);
  }
  function renderAccount(){
   const host=$('accountControls');if(!host)return;
   const userIcon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg>';
-  host.innerHTML=session?'<button class="header-account-user" onclick="CodeLibrary.cloud()" '+(busy?'disabled':'')+' aria-label="บัญชี '+esc(session.user.email)+'" title="'+esc(session.user.email)+'">'+userIcon+'<span class="header-account-email">'+esc(session.user.email)+'</span></button><button class="header-logout-button" onclick="CodeLibrary.logout()" aria-label="ออกจากระบบ" title="ออกจากระบบ" '+(busy?'disabled':'')+'><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H4v16h5M14 8l4 4-4 4M8 12h13"/></svg><span>ออกจากระบบ</span></button>':'<button class="header-login-button" onclick="CodeLibrary.cloud()" '+(busy?'disabled':'')+'>'+userIcon+(busy?'กำลังเชื่อมต่อ…':'เข้าสู่ระบบ')+'</button>';
+  host.innerHTML=session?'<button class="header-account-user" onclick="CodeLibrary.cloud()" '+(busy?'disabled':'')+' aria-label="บัญชี '+esc(session.username)+'" title="'+esc(session.username)+'">'+userIcon+'<span class="header-account-name">'+esc(session.username)+'</span></button><button class="header-logout-button" onclick="CodeLibrary.logout()" aria-label="ออกจากระบบ" title="ออกจากระบบ" '+(busy?'disabled':'')+'><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H4v16h5M14 8l4 4-4 4M8 12h13"/></svg><span>ออกจากระบบ</span></button>':'<button class="header-login-button" onclick="CodeLibrary.cloud()" '+(busy?'disabled':'')+'>'+userIcon+(busy?'กำลังเชื่อมต่อ…':'เข้าสู่ระบบ')+'</button>';
  }
  function render(){
   renderAccount();
@@ -200,9 +200,9 @@ const CodeLibrary=(()=>{
  }
  function cloud(){
   const logged=!!session;
-  const info=logged?'<div class="code-cloud-info"><b>'+esc(session.user.email)+'</b><p>'+esc(status())+'</p></div>':'<p class="account-intro">เข้าสู่ระบบเพื่อเปิดคลังโค้ดรหัสของคุณ</p>';
+  const info=logged?'<div class="code-cloud-info"><b>'+esc(session.username)+'</b><p>'+esc(status())+'</p></div>':'<p class="account-intro">เข้าสู่ระบบเพื่อเปิดคลังโค้ดรหัสของคุณ</p>';
   const actions=`<div class="code-cloud-actions"><button class="primary" onclick="CodeLibrary.push()" ${busy?'disabled':''}>ส่งข้อมูลขึ้นออนไลน์</button><button onclick="CodeLibrary.pullPrompt()" ${busy?'disabled':''}>โหลดข้อมูลจากออนไลน์</button><button onclick="CodeLibrary.copyLocal()" ${busy?'disabled':''}>รวมรหัสจากคลังในเครื่อง</button><button onclick="CodeLibrary.logout()" ${busy?'disabled':''}>ออกจากระบบ</button></div><p class="help">กดส่งข้อมูลขึ้นออนไลน์หลังเพิ่มหรือแก้ไขรหัส เพื่อเปิดต่อบนเครื่องอื่นด้วยบัญชีเดิม</p>`;
-  const form=`<form id="cloudForm" class="code-form account-login-form" onsubmit="event.preventDefault();CodeLibrary.login()"><label class="field">อีเมล<input id="cloudEmail" type="email" required value="${esc(loginEmail)}" autocomplete="username" autocapitalize="none" spellcheck="false"></label><label class="field">รหัสผ่าน<input id="cloudPassword" type="password" required autocomplete="current-password"></label><button class="primary account-submit" type="submit" ${busy?'disabled':''}>${busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}</button><details class="code-cloud-settings"><summary>ตั้งค่าโปรเจกต์ (สำหรับผู้พัฒนา)</summary><label class="field">Project URL<input id="cloudUrl" type="url" required value="${esc(config?.url||'')}" placeholder="https://your-project.supabase.co"></label><label class="field">Publishable key / anon key<input id="cloudKey" required value="${esc(config?.key||'')}" placeholder="sb_publishable_…" autocomplete="off"></label></details><p class="help">ใช้บัญชีที่สร้างไว้ใน Supabase Authentication เมื่อรีเฟรชต้องเข้าสู่ระบบใหม่</p></form>`;
+  const form=`<form id="cloudForm" class="code-form account-login-form" onsubmit="event.preventDefault();CodeLibrary.login()"><label class="field">Username<input id="cloudUsername" type="text" required minlength="3" maxlength="32" pattern="[A-Za-z][A-Za-z0-9._-]{2,31}" value="${esc(loginUsername)}" placeholder="teen" autocomplete="username" autocapitalize="none" spellcheck="false"></label><label class="field">Password<input id="cloudPassword" type="password" required minlength="6" autocomplete="current-password"></label><button class="primary account-submit" type="submit" ${busy?'disabled':''}>${busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}</button><details class="code-cloud-settings"><summary>ตั้งค่าโปรเจกต์ (สำหรับผู้พัฒนา)</summary><label class="field">Project URL<input id="cloudUrl" type="url" required value="${esc(config?.url||'')}" placeholder="https://your-project.supabase.co"></label><label class="field">Publishable key / anon key<input id="cloudKey" required value="${esc(config?.key||'')}" placeholder="sb_publishable_…" autocomplete="off"></label><p class="help">ตั้งค่าบัญชี Username ครั้งแรกตามไฟล์ ONLINE-DATABASE.md</p></details></form>`;
   modal(logged?'บัญชีผู้ใช้':'เข้าสู่ระบบ',info+`<p id="cloudMessage" class="code-message" role="status">${esc(message)}</p>`+(logged?actions:form));
  }
  async function request(path,{method='GET',body,auth=true,retry=true}={}){
@@ -217,12 +217,13 @@ const CodeLibrary=(()=>{
    try{
     const refreshed=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token},auth:false});
     if(!refreshed?.access_token||refreshed.user?.id!==session.user.id)throw Error('กรุณาเข้าสู่ระบบใหม่');
-    session=refreshed;return request(path,{method,body,auth,retry:false});
+    session={...refreshed,username:session.username};return request(path,{method,body,auth,retry:false});
    }catch(e){session=null;renderAccount();throw e}
   }
   if(!response.ok){
    if(result?.code==='40001')throw Error('ข้อมูลออนไลน์เปลี่ยนจากเครื่องอื่น กรุณาสำรอง JSON ในเครื่อง แล้วโหลดข้อมูลออนไลน์ก่อนรวมรายการและส่งใหม่');
-   if(response.status===401){if(auth){session=null;renderAccount()}throw Error('เข้าสู่ระบบไม่ได้หรือหมดอายุ กรุณาตรวจอีเมล รหัสผ่าน และยืนยันอีเมลแล้วเข้าสู่ระบบใหม่')}
+   if(result?.error_code==='email_not_confirmed')throw Error('บัญชียังไม่พร้อมใช้งาน กรุณาให้ผู้พัฒนายืนยันบัญชีใน Supabase ก่อน');
+   if(response.status===401||result?.error_code==='invalid_credentials'){if(auth){session=null;renderAccount()}throw Error('เข้าสู่ระบบไม่ได้ กรุณาตรวจ Username และ Password แล้วลองใหม่')}
    if(result?.code==='PGRST202'||result?.code==='42P01')throw Error('ยังไม่พบตารางหรือฟังก์ชัน กรุณารัน supabase/code-library.sql ใน SQL Editor ก่อน');
    throw Error('เชื่อมต่อไม่สำเร็จ: '+(result?.msg||result?.message||result?.error_description||response.status));
   }
@@ -235,14 +236,16 @@ const CodeLibrary=(()=>{
  }
  async function login(){
   if(busy||!$('cloudForm').reportValidity())return;
-  let next;try{next=CodeCatalog.config($('cloudUrl').value,$('cloudKey').value)}catch(e){$('cloudMessage').textContent=e.message;return}
-  const email=$('cloudEmail').value.trim(),password=$('cloudPassword').value;
-  loginEmail=email;config=next;$('cloudPassword').value='';
+  let next,identity;try{next=CodeCatalog.config($('cloudUrl').value,$('cloudKey').value);identity=CodeCatalog.loginIdentity($('cloudUsername').value,next.url)}catch(e){$('cloudMessage').textContent=e.message;return}
+  const password=$('cloudPassword').value;
+  if(password.length<6){$('cloudMessage').textContent='Password ต้องมีอย่างน้อย 6 ตัวอักษร';return}
+  const {username,email}=identity;
+  loginUsername=username;config=next;$('cloudPassword').value='';
   await operation(async()=>{
    const result=await request('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password},auth:false});
    if(typeof result?.user?.id!=='string'||!result.user.id||!result.access_token)throw Error('ข้อมูลเข้าสู่ระบบไม่ครบถ้วน');
    switchStore('shiftplanner-codes-account:'+config.url+':'+result.user.id);
-   session={...result,user:{...result.user,email:result.user.email||email}};
+   session={...result,username,user:{...result.user,email:result.user.email||email}};
    try{localStorage.setItem(CONFIG,JSON.stringify(config))}catch{}
    // Read only on login; preserve unsent edits and the separate local library.
    if(loadError){message='เข้าสู่ระบบแล้ว · '+loadError;return}
@@ -298,7 +301,7 @@ const CodeLibrary=(()=>{
    let warning='';
    try{await request('/auth/v1/logout?scope=local',{method:'POST'})}catch(e){warning=' · ยืนยันการออกจากระบบกับเซิร์ฟเวอร์ไม่ได้ กรุณาเข้าสู่ระบบใหม่เมื่อเชื่อมต่อได้'}
    finally{
-    session=null;loginEmail='';
+    session=null;loginUsername='teen';
     try{switchStore(LOCAL)}catch(e){warning+=' · '+e.message}
    }
    message='ออกจากระบบบนเครื่องนี้แล้ว'+warning;toast(message);

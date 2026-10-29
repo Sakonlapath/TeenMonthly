@@ -25,6 +25,10 @@ function unzipStored(bytes){
 }
 async function main(){
  const b=boot();const model=b.run('CodeCatalog');
+ assert.equal(model.loginIdentity(' TEEN ','https://test.supabase.co').email,'teen@test.supabase.co');
+ assert.equal(model.loginIdentity('TEEN','https://test.supabase.co').username,'teen');
+ for(const name of ['','te','<img>','teen@domain.com','กกก','a'.repeat(33)])assert.throws(()=>model.loginIdentity(name,'https://test.supabase.co'));
+ assert.throws(()=>model.loginIdentity('teen','https://evil.example'));
  assert(b.$('accountControls').innerHTML.includes('header-login-button'));
  assert(!b.$('accountControls').innerHTML.includes('header-logout-button'));
  assert.throws(()=>b.run('CodeLibrary.lookup("")'));
@@ -71,6 +75,9 @@ async function main(){
  speech.run('CodeLibrary.motion()');assert.equal(speech.timers.size,1);
  speech.run('currentView="schedule";CodeLibrary.suspend();CodeLibrary.nextSpeech()');assert.equal(speech.timers.size,0);assert.equal(speech.$('kittySpeechText').textContent,'สวัสดีคนเก่งของเค้า');
  b.run('CodeLibrary.cloud()');
+ assert(b.$('modalBody').innerHTML.includes('id="cloudUsername" type="text"'));
+ assert(b.$('modalBody').innerHTML.includes('value="teen"'));
+ assert(!b.$('modalBody').innerHTML.includes('type="email"'));
  assert(b.$('modalBody').innerHTML.includes('value="https://omtcyjoewqtfsreshgfu.supabase.co"'));
  assert(b.$('modalBody').innerHTML.includes('value="sb_publishable_3Ixd4qU4vGBYVRJUqTurSg_vFabVA5B"'));
  const savedConfig=boot({storage:new Map([['shiftplanner-codes-cloud-v1',JSON.stringify({url:'https://saved-project.supabase.co',key:'sb_publishable_saved'})]])});
@@ -256,7 +263,7 @@ async function main(){
   const body=options.body?JSON.parse(options.body):null;calls.push({url,options,body});
   if(fail)throw Error('network unavailable');
   const response=(status,data)=>({ok:status>=200&&status<300,status,json:async()=>data});
-  if(url.includes('/auth/v1/token'))return response(200,{access_token:'token',refresh_token:'refresh',user:{id:'user1',email:'test@example.com'}});
+  if(url.includes('/auth/v1/token')){if(url.includes('grant_type=password'))assert.equal(body.email,'teen@test.supabase.co');return response(200,{access_token:'token',refresh_token:'refresh',user:{id:'user1',email:'teen@test.supabase.co'}})}
   if(expire){expire=false;return response(401,{})}
   assert.equal(options.headers.Authorization,'Bearer token');assert.equal(options.headers.apikey,'sb_publishable_test');
   if(url.includes('/rpc/save_code_library')){
@@ -268,10 +275,11 @@ async function main(){
  }
  const c=boot({storage:new Map([[LOCAL,serialized([row('A01')])]]),fetch});
  c.run('CodeLibrary.render();CodeLibrary.cloud()');
- c.$('cloudUrl').value='https://test.supabase.co';c.$('cloudKey').value='sb_publishable_test';c.$('cloudEmail').value='test@example.com';c.$('cloudPassword').value='fake-test-password';
+ c.$('cloudUrl').value='https://test.supabase.co';c.$('cloudKey').value='sb_publishable_test';c.$('cloudUsername').value='teen';c.$('cloudPassword').value='fake-test-password';
  await c.run('CodeLibrary.login()');
- assert(c.$('modalBody').innerHTML.includes('test@example.com'));
- assert(c.$('accountControls').innerHTML.includes('test@example.com'));
+ assert(c.$('modalBody').innerHTML.includes('teen'));
+ assert(c.$('accountControls').innerHTML.includes('teen'));
+ assert(!c.$('accountControls').innerHTML.includes('@'));
  assert(c.$('accountControls').innerHTML.includes('header-logout-button'));
  assert.equal(c.$('cloudPassword').value,'');
  c.run('CodeLibrary.copyLocal()');c.form(row('A01',{note:'second online entry'}));c.run('CodeLibrary.save("")');await c.run('CodeLibrary.push()');
@@ -290,20 +298,21 @@ async function main(){
  await c.run('CodeLibrary.pull()');assert.equal(JSON.parse(c.storage.get(account)).records[0].code,'B02');
  assert(JSON.parse(c.downloads.at(-1).content).records.some(r=>r.note==='offline edits'));
  expire=true;await c.run('CodeLibrary.push()');assert(calls.some(r=>r.url.includes('grant_type=refresh_token')));assert.equal(cloud.revision,3);
+ assert(c.$('accountControls').innerHTML.includes('teen'));
  fail=true;c.form(row('B02',{note:'offline survives'}));c.run('CodeLibrary.save('+JSON.stringify(c.idFor('B02'))+')');await c.run('CodeLibrary.push()');
  assert.equal(JSON.parse(c.storage.get(account)).dirty,true);assert.equal(cloud.revision,3);
  fail=false;await c.run('CodeLibrary.logout()');assert(c.$('codeResults').innerHTML.includes('A01'));
- assert(c.$('accountControls').innerHTML.includes('header-login-button'));assert(!c.$('accountControls').innerHTML.includes('test@example.com'));
+ assert(c.$('accountControls').innerHTML.includes('header-login-button'));assert(!c.$('accountControls').innerHTML.includes('teen'));
  assert(calls.some(r=>r.url.endsWith('/auth/v1/logout?scope=local')));
  assert.equal(JSON.parse(c.storage.get(account)).records[0].note,'offline survives');
  // Login reads the authenticated account only, preserving unsent edits and local data.
  const authUrl='https://test.supabase.co',authKey='shiftplanner-codes-account:'+authUrl+':user1';
- const authForm=client=>{client.run('CodeLibrary.cloud()');client.$('cloudUrl').value=authUrl;client.$('cloudKey').value='sb_publishable_test';client.$('cloudEmail').value='test@example.com';client.$('cloudPassword').value='not-a-real-password'};
+ const authForm=client=>{client.run('CodeLibrary.cloud()');client.$('cloudUrl').value=authUrl;client.$('cloudKey').value='sb_publishable_test';client.$('cloudUsername').value='teen';client.$('cloudPassword').value='not-a-real-password'};
  const reply=(status,data)=>({ok:status>=200&&status<300,status,json:async()=>data});
  const loginResult={access_token:'token',refresh_token:'refresh',user:{id:'user1',email:'test@example.com'}};
  let authFailure=false,readFailure=false,authReads=0,authWrites=0;
  const authFetch=async(url,options)=>{
-  if(url.includes('/auth/v1/token'))return authFailure?reply(401,{}):reply(200,loginResult);
+  if(url.includes('/auth/v1/token')){if(url.includes('grant_type=password'))assert.equal(JSON.parse(options.body).email,'teen@test.supabase.co');return authFailure?reply(401,{}):reply(200,loginResult)}
   if(url.includes('/rest/v1/code_libraries')){authReads++;if(readFailure)throw Error('offline');assert(url.endsWith('owner_id=eq.user1'));return reply(200,[{records:[row('Z99',{note:'account data'})],revision:4}])}
   authWrites++;return reply(200,null);
  };
@@ -321,17 +330,24 @@ async function main(){
  authForm(wrongLogin);await wrongLogin.run('CodeLibrary.login()');
  assert(wrongLogin.$('accountControls').innerHTML.includes('header-login-button'));
  assert.equal(wrongLogin.storage.get(authKey),undefined);assert.equal(wrongLogin.$('cloudPassword').value,'');
- assert(wrongLogin.$('modalBody').innerHTML.includes('เข้าสู่ระบบไม่ได้'));assert(wrongLogin.$('modalBody').innerHTML.includes('value="test@example.com"'));
+ assert(wrongLogin.$('modalBody').innerHTML.includes('เข้าสู่ระบบไม่ได้'));assert(wrongLogin.$('modalBody').innerHTML.includes('value="teen"'));
  authFailure=false;readFailure=true;
  const offlineLogin=boot({storage:new Map([[authKey,serialized([row('K01')],{dirty:false})]]),fetch:authFetch});
  authForm(offlineLogin);await offlineLogin.run('CodeLibrary.login()');
- assert(offlineLogin.$('accountControls').innerHTML.includes('test@example.com'));assert(offlineLogin.$('modalBody').innerHTML.includes('โหลดคลังไม่ได้'));
+ assert(offlineLogin.$('accountControls').innerHTML.includes('teen'));assert(offlineLogin.$('modalBody').innerHTML.includes('โหลดคลังไม่ได้'));
  assert.equal(JSON.parse(offlineLogin.storage.get(authKey)).records[0].code,'K01');
  // Failed refresh expires the header login without discarding cached edits.
  offlineLogin.ctx.fetch=async(url)=>url.includes('grant_type=refresh_token')?reply(400,{}):reply(401,{});
  await offlineLogin.run('CodeLibrary.push()');assert(offlineLogin.$('accountControls').innerHTML.includes('header-login-button'));
  assert.equal(JSON.parse(offlineLogin.storage.get(authKey)).records[0].code,'K01');
  for(const client of [cleanLogin,pendingLogin,wrongLogin,offlineLogin])assert(![...client.storage.values()].join('').includes('not-a-real-password'));
+ let invalidLoginCalls=0;
+ const invalidLogin=boot({fetch:async()=>{invalidLoginCalls++;throw Error('must not call')}});
+ authForm(invalidLogin);invalidLogin.$('cloudUsername').value='teen@domain.com';await invalidLogin.run('CodeLibrary.login()');assert.equal(invalidLoginCalls,0);
+ invalidLogin.$('cloudUsername').value='teen';invalidLogin.$('cloudPassword').value='short';await invalidLogin.run('CodeLibrary.login()');assert.equal(invalidLoginCalls,0);
+ assert(invalidLogin.$('cloudMessage').textContent.includes('6'));
+ const unconfirmed=boot({fetch:async()=>reply(400,{error_code:'email_not_confirmed',msg:'Confirm internal identity first'})});
+ authForm(unconfirmed);await unconfirmed.run('CodeLibrary.login()');assert(unconfirmed.$('modalBody').innerHTML.includes('บัญชียังไม่พร้อมใช้งาน'));assert(!unconfirmed.$('modalBody').innerHTML.includes('@'));
  const sql=fs.readFileSync(path.join(root,'supabase/code-library.sql'),'utf8');
  assert(sql.includes('enable row level security'));assert(sql.includes('security invoker'));assert(sql.includes("errcode = '40001'"));assert(sql.includes('and revision = expected_revision'));
  console.log('PASS: duplicate-code entries, independent editing/deletion, stable legacy migration, duplicate-safe JSON/Excel/cloud roundtrip, filtering, escaped notes, tab conflicts, recovery, cloud auth and offline preservation');
