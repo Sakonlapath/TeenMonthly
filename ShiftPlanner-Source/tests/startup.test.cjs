@@ -13,7 +13,7 @@ else for(const file of ['core','data','export-template','exports','app','help-ch
 return{ctx,run,element,stored:()=>stored,flushTimers(){for(const[id,callback]of [...timers]){timers.delete(id);callback()}}};
 }
 for(const standalone of [false,true]){
- const codes=boot(null,standalone);codes.run('view("codes")');
+ const codes=boot(null,standalone);assert.equal(codes.run('currentView'),'codes');codes.run('view("codes")');
  assert(codes.element('codesView').innerHTML.includes('คลังโค้ดรหัส'));
  assert(codes.element('codeResults').innerHTML.includes('เพิ่มรหัสแรก'));
  assert(codes.element('codesView').innerHTML.includes('kitty-character-arm'));
@@ -34,7 +34,7 @@ run('onQuotaChange("3","1.5")');assert.equal(run('activeMonth().quotas["3"]'),4)
 run('onQuotaInput({value:"15"},"3")');assert.equal(element('categoryTotal-card').textContent,0,'typing a goal cannot change the assigned count');
 run('onQuotaChange("2","15");onQuotaChange("3","15");onQuotaChange("4","15");onQuotaChange("1","9");onQuotaChange("5","5");onQuotaChange("6","5");onQuotaChange("7","6");onQuotaChange("8","8")');
 assert(element('categoryTotals').innerHTML.includes('id="calendarTotal" aria-live="polite">99</strong>'));assert(!element('categoryTotals').innerHTML.includes('quotaTotal'));
-const index=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');assert.equal((index.match(/id="autoBtn"/g)||[]).length,1);assert(index.indexOf('id="autoBtn"')>index.indexOf('id="scheduleView"'));
+const index=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');assert(index.indexOf('id="navCodes"')<index.indexOf('id="navSchedule"'));assert.equal((index.match(/id="autoBtn"/g)||[]).length,1);assert(index.indexOf('id="autoBtn"')>index.indexOf('id="scheduleView"'));
 assert(element('scheduleTable').innerHTML.includes('data-quota-id="3"'));
 assert(!element('scheduleTable').innerHTML.includes('<tfoot>'));
 assert(element('scheduleTable').innerHTML.endsWith('</tbody>'));

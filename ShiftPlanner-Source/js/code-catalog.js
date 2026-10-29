@@ -4,7 +4,7 @@ const CodeCatalog = (() => {
  const MAX_BYTES=4500000, MAX_RECORDS=10000;
  function records(value){
   if(!Array.isArray(value)||value.length>MAX_RECORDS)throw Error('รายการต้องไม่เกิน 10,000 รหัส');
-  const seen=new Set();
+  const seen=new Set(),legacyCounts=new Map();
   const result=value.map(row=>{
    if(!row||typeof row!=='object')throw Error('รูปแบบรายการไม่ถูกต้อง');
    const r={};
@@ -16,30 +16,44 @@ const CodeCatalog = (() => {
    r.code=r.code.toUpperCase().replace(/\s/g,'');
    if(!/^[A-Z][0-9]+(?:\.[0-9]+)?$/.test(r.code))throw Error('รหัสต้องเป็น A–Z ตามด้วยตัวเลข เช่น A00 หรือ A00.1');
    if(!r.disease)throw Error('กรุณาระบุชื่อโรค');
-   if(seen.has(r.code))throw Error('รหัส '+r.code+' ซ้ำกัน');
-   seen.add(r.code);
+   // Older libraries have no IDs. Derive repeatable IDs without changing their data.
+   // Include an occurrence number so even identical legacy rows remain separate.
+   const fingerprint=legacyId(r),occurrence=(legacyCounts.get(fingerprint)||0)+1;
+   legacyCounts.set(fingerprint,occurrence);
+   r.id=row.id??fingerprint+'-'+occurrence;
+   if(typeof r.id!=='string'||!/^[A-Za-z0-9_.:-]{1,100}$/.test(r.id))throw Error('ตัวระบุรายการไม่ถูกต้อง');
+   if(seen.has(r.id))throw Error('ตัวระบุรายการซ้ำกัน กรุณาตรวจสอบไฟล์สำรอง');
+   seen.add(r.id);
+   if(row.favorite!==undefined&&typeof row.favorite!=='boolean')throw Error('สถานะรายการโปรดไม่ถูกต้อง');
+   r.favorite=row.favorite===true;
    return r;
   });
   if(new TextEncoder().encode(JSON.stringify(result)).length>MAX_BYTES)throw Error('คลังรหัสใหญ่เกิน 4.5 MB กรุณาลดขนาดข้อมูล');
   return sort(result);
  }
+ function legacyId(row){
+  let a=2166136261,b=3339675911;
+  for(const c of JSON.stringify(row)){const n=c.codePointAt(0);a=Math.imul(a^n,16777619);b=Math.imul(b^n,2246822519)}
+  return 'legacy-'+(a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0');
+ }
+ function newId(){return globalThis.crypto?.randomUUID?.()||'entry-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+'-'+Math.random().toString(36).slice(2)}
  function sort(rows){return [...rows].sort((a,b)=>a.code.localeCompare(b.code,'en',{numeric:true})||a.code.localeCompare(b.code))}
  function filter(rows,category='',query='',kind=[]){
   const terms=query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   const kinds=Array.isArray(kind)?kind:kind==='both'?['conditions','procedures']:kind?[kind]:[];
   return sort(rows.filter(r=>(!category||r.code[0]===category)&&kinds.every(k=>!!r[k])&&terms.every(t=>[r.code,r.disease,r.conditions,r.procedures,r.note].join(' ').toLocaleLowerCase().includes(t))));
  }
- function upsert(rows,input,oldCode=null){
-  const r=records([input])[0];
-  if(oldCode&&!rows.some(x=>x.code===oldCode))throw Error('ไม่พบรหัสที่กำลังแก้ไข กรุณาเปิดรายการใหม่');
-  if(rows.some(x=>x.code===r.code&&x.code!==oldCode))throw Error('มีรหัส '+r.code+' แล้ว กรุณาแก้รายการเดิม');
-  return records([...rows.filter(x=>x.code!==oldCode),r]);
+ function upsert(rows,input,oldId=null){
+  rows=records(rows);
+  if(oldId&&!rows.some(x=>x.id===oldId))throw Error('ไม่พบรายการที่กำลังแก้ไข กรุณาเปิดรายการใหม่');
+  const r=records([{...rows.find(x=>x.id===oldId),...input,id:oldId||newId()}])[0];
+  return records(oldId?rows.map(x=>x.id===oldId?r:x):[...rows,r]);
  }
  function merge(rows,incoming){
-  const next=new Map(rows.map(r=>[r.code,r]));
+  const next=new Map(records(rows).map(r=>[r.id,r]));
   for(const r of records(incoming)){
-   if(next.has(r.code)&&JSON.stringify(next.get(r.code))!==JSON.stringify(r))throw Error('รหัส '+r.code+' มีรายละเอียดต่างกัน กรุณาแก้หรือลบรายการเดิมก่อนนำเข้า');
-   next.set(r.code,r);
+   if(next.has(r.id)&&JSON.stringify(next.get(r.id))!==JSON.stringify(r))throw Error('รายการ '+r.code+' มีรายละเอียดต่างกัน กรุณาตรวจสอบรายการเดิมก่อนนำเข้า');
+   next.set(r.id,r);
   }
   return records([...next.values()]);
  }

@@ -1,6 +1,6 @@
 
 const $=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let state=clone(SEED),history=[],currentView='schedule',editing=null,choice='',toastTimer;
+let state=clone(SEED),history=[],currentView='codes',editing=null,choice='',toastTimer;
 const STORE='card-room-planner-v1';
 try{let raw=localStorage.getItem(STORE);if(raw){let v=JSON.parse(raw);validateBackup(v);state=v}}catch(e){setTimeout(()=>toast('เปิดข้อมูลที่บันทึกไม่ได้ ใช้ข้อมูลตั้งต้นแทน'),300)}
 const removedLegacySample=isLegacyOctoberSample(state.months['2026-10']);
@@ -30,7 +30,7 @@ function normalizeCalendarState(s){let changed=false;for(const month of Object.k
 function changed(){normalizeCalendarState(state);save();render()}
 function undo(){if(!history.length)return;state=history.pop();changed();toast('ย้อนการแก้ไขแล้ว')}
 function toast(s){$('toast').textContent=s;$('toast').classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),4500)}
-function view(v){if(typeof cancelPaint==='function')cancelPaint();currentView=v;for(const [name,id]of [['schedule','Schedule'],['summary','Summary'],['codes','Codes']]){const section=$(name==='codes'?'codesView':name+'View'),button=$('nav'+id);if(section)section.classList.toggle('hidden',v!==name);if(button)button.classList.toggle('active',v===name)}if(v==='codes'&&typeof CodeLibrary!=='undefined')CodeLibrary.render()}
+function view(v){if(typeof cancelPaint==='function')cancelPaint();currentView=v;for(const [name,id]of [['schedule','Schedule'],['summary','Summary'],['codes','Codes']]){const section=$(name==='codes'?'codesView':name+'View'),button=$('nav'+id);if(section)section.classList.toggle('hidden',v!==name);if(button)button.classList.toggle('active',v===name)}if(typeof CodeLibrary!=='undefined'){if(v==='codes')CodeLibrary.render();else CodeLibrary.suspend()}}
 function selectMonth(m){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)||+m.slice(0,4)<1900||+m.slice(0,4)>2200){toast('เลือกปี ค.ศ. 1900–2200');return}if(typeof cancelPaint==='function')cancelPaint();state.selected=m;if(!state.months[m])state.months[m]=freshMonth(m);changed()}
 function changeMonth(off){selectMonth(monthOffset(state.selected,off))}
 function categoryCountInfo(s,month,id,category){
