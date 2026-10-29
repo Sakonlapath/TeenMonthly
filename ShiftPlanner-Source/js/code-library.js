@@ -253,7 +253,7 @@ const CodeLibrary=(()=>{
    try{
     const remote=await readRemote();
     if(remote){persist(remote);page=1;message='เข้าสู่ระบบแล้ว โหลดคลัง '+doc.records.length+' รหัสเรียบร้อย'}
-    else message='เข้าสู่ระบบแล้ว ยังไม่มีคลังออนไลน์ เพิ่มรหัสใหม่หรือรวมรหัสจากคลังในเครื่องได้เลย';
+    else message='';
    }catch(e){message=session?'เข้าสู่ระบบแล้ว แต่โหลดคลังไม่ได้: '+e.message:'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่'}
   });
  }
