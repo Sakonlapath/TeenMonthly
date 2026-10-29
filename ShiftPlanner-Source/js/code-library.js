@@ -16,6 +16,8 @@ const CodeLibrary=(()=>{
  // Draw icons as SVG so hearts and controls work even without an emoji font.
  function icon(name,extra=''){
   const paths={heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>',star:'<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>',search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',plus:'<path d="M12 5v14M5 12h14"/>',file:'<path d="M14 3H5v18h14V8Zm0 0v5h5M8 12h8M8 16h6"/>',edit:'<path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z"/>',trash:'<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',pause:'<path d="M8 5v14M16 5v14"/>',play:'<path d="m8 4 12 8-12 8Z"/>',conditions:'<path d="m12 3 10 18H2Z"/><path d="M12 9v5M12 17v.1"/>',procedures:'<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z"/>',note:'<path d="M4 3h16v18H4ZM8 8h8M8 12h8M8 16h5"/>',arrow:'<path d="m9 5 7 7-7 7"/>',cloud:'<path d="M7 18a5 5 0 1 1-1-9 6 6 0 0 1 12-1 5 5 0 0 1-1 10M12 12v9m-3-3 3 3 3-3"/>'};
+  paths.eye='<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>';
+  paths['eye-off']=paths.eye+'<path d="m3 3 18 18"/>';
   return '<svg class="code-icon '+extra+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+(paths[name]||paths.heart)+'</svg>';
  }
  function suspend(){if(speechTimer!==undefined){clearTimeout(speechTimer);speechTimer=undefined}}
@@ -203,8 +205,17 @@ const CodeLibrary=(()=>{
   const logged=!!session;
   const info=logged?'<div class="code-cloud-info"><b>'+esc(session.username)+'</b><p>'+esc(status())+'</p></div>':'<p class="account-intro">เข้าสู่ระบบเพื่อเปิดคลังโค้ดรหัสของคุณ</p>';
   const actions=`<div class="code-cloud-actions"><button class="primary" onclick="CodeLibrary.push()" ${busy?'disabled':''}>ส่งข้อมูลขึ้นออนไลน์</button><button onclick="CodeLibrary.pullPrompt()" ${busy?'disabled':''}>โหลดข้อมูลจากออนไลน์</button><button onclick="CodeLibrary.copyLocal()" ${busy?'disabled':''}>รวมรหัสจากคลังในเครื่อง</button><button onclick="CodeLibrary.logout()" ${busy?'disabled':''}>ออกจากระบบ</button></div><p class="help">กดส่งข้อมูลขึ้นออนไลน์หลังเพิ่มหรือแก้ไขรหัส เพื่อเปิดต่อบนเครื่องอื่นด้วยบัญชีเดิม</p>`;
-  const form=`<form id="cloudForm" class="code-form account-login-form" onsubmit="event.preventDefault();CodeLibrary.login()"><label class="field">Username<input id="cloudUsername" type="text" required minlength="3" maxlength="32" pattern="[A-Za-z][A-Za-z0-9._-]{2,31}" value="${esc(loginUsername)}" placeholder="teen" autocomplete="username" autocapitalize="none" spellcheck="false"></label><label class="field">Password<input id="cloudPassword" type="password" required minlength="6" autocomplete="current-password"></label><button class="primary account-submit" type="submit" ${busy?'disabled':''}>${busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}</button></form>`;
+  const form=`<form id="cloudForm" class="code-form account-login-form" onsubmit="event.preventDefault();CodeLibrary.login()"><label class="field">Username<input id="cloudUsername" type="text" required minlength="3" maxlength="32" pattern="[A-Za-z][A-Za-z0-9._-]{2,31}" value="${esc(loginUsername)}" placeholder="teen" autocomplete="username" autocapitalize="none" spellcheck="false"></label><div class="field"><label for="cloudPassword">Password</label><div class="account-password"><input id="cloudPassword" type="password" required minlength="6" autocomplete="current-password"><button id="cloudPasswordToggle" class="account-password-toggle" type="button" onclick="CodeLibrary.togglePassword()" aria-controls="cloudPassword" aria-label="แสดงรหัสผ่าน" aria-pressed="false" title="แสดงรหัสผ่าน">${icon('eye')}</button></div></div><button class="primary account-submit" type="submit" ${busy?'disabled':''}>${busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}</button></form>`;
   modal(logged?'บัญชีผู้ใช้':'เข้าสู่ระบบ',info+`<p id="cloudMessage" class="code-message" role="status">${esc(message)}</p>`+(logged?actions:form));
+ }
+ function togglePassword(){
+  const input=$('cloudPassword'),button=$('cloudPasswordToggle');
+  if(!input||!button)return;
+  const visible=input.type==='password';
+  input.type=visible?'text':'password';
+  const label=visible?'ซ่อนรหัสผ่าน':'แสดงรหัสผ่าน';
+  button.setAttribute('aria-label',label);button.setAttribute('title',label);button.setAttribute('aria-pressed',String(visible));
+  button.innerHTML=icon(visible?'eye-off':'eye');
  }
  async function request(path,{method='GET',body,auth=true,retry=true}={}){
   if(!config)throw Error('ยังไม่ได้ตั้งค่า Supabase');
@@ -332,6 +343,6 @@ const CodeLibrary=(()=>{
   if(currentView==='codes')render();
  });
  if(currentView==='codes')render();else renderAccount();
- return {render,edit,save,remove,confirmRemove,files,backup,excel,importFile,cloud,login,push,pullPrompt,pull,copyLocal,logout,local,recover,confirmRecover,motion,nextSpeech,suspend,detail,favorite,goToPage,removeAll,confirmRemoveAll,cancelRemoveAll,lookup,openSearch,
+ return {render,edit,save,remove,confirmRemove,files,backup,excel,importFile,cloud,togglePassword,login,push,pullPrompt,pull,copyLocal,logout,local,recover,confirmRecover,motion,nextSpeech,suspend,detail,favorite,goToPage,removeAll,confirmRemoveAll,cancelRemoveAll,lookup,openSearch,
   favorites(){favoritesOnly=!favoritesOnly;page=1;renderFavorites();renderResults()},search(v){query=v;page=1;renderResults()},kind(v,checked){if(!['conditions','procedures','note'].includes(v))return;kind=kind.filter(k=>k!==v);if(checked)kind.push(v);page=1;renderResults()},category(v){if(v==='')category=[];else if(/^[A-Z]$/.test(v))category=category.includes(v)?category.filter(c=>c!==v):[...category,v].sort();else return;page=1;render()},page(delta){goToPage(page+delta)},clearSearch(){category=[];query='';kind=[];favoritesOnly=false;page=1;render()}};
 })();
