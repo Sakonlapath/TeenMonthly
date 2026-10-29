@@ -15,7 +15,7 @@ return{ctx,run,element,stored:()=>stored,flushTimers(){for(const[id,callback]of 
 for(const standalone of [false,true]){
  const codes=boot(null,standalone);assert.equal(codes.run('currentView'),'codes');codes.run('view("codes")');
  assert(codes.element('codesView').innerHTML.includes('คลังโค้ดรหัส'));
- assert(codes.element('codeResults').innerHTML.includes('เพิ่มรหัสแรก'));
+ assert(codes.element('codeResults').innerHTML.includes('ยังไม่มีรหัส'));
  assert(codes.element('codesView').innerHTML.includes('kitty-character-arm'));
  assert(!codes.element('codesView').innerHTML.includes('onclick="CodeLibrary.cloud()"'));
  assert(codes.element('scheduleView').classList.contains('hidden'));
