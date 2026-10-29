@@ -1,11 +1,12 @@
 /* Standalone-compatible UI. No external libraries or cloud credentials required offline. */
 const CodeLibrary=(()=>{
  'use strict';
- const LOCAL='shiftplanner-codes-local-v1',ACTIVE='shiftplanner-codes-active-v1',CONFIG='shiftplanner-codes-cloud-v1';
+ const LOCAL='shiftplanner-codes-local-v1',ACTIVE='shiftplanner-codes-active-v1';
  const empty=()=>({version:1,records:[],revision:0,dirty:false});
  // Public project configuration only. Passwords and session tokens are never bundled.
  const defaultConfig=CodeCatalog.config('https://omtcyjoewqtfsreshgfu.supabase.co','sb_publishable_3Ixd4qU4vGBYVRJUqTurSg_vFabVA5B');
- let store=LOCAL,doc=empty(),config=defaultConfig,session=null,loadError='',rawBackup='',storageWarning='',stale=false,busy=false,message='',category=[],query='',kind=[],page=1;
+ const config=defaultConfig;
+ let store=LOCAL,doc=empty(),session=null,loadError='',rawBackup='',storageWarning='',stale=false,busy=false,message='',category=[],query='',kind=[],page=1;
  const backedUpRecords=new Map();let pendingClear=null;
  let loginUsername='teen';
  const pageSize=12;
@@ -34,7 +35,7 @@ const CodeLibrary=(()=>{
   if(control){control.setAttribute('aria-pressed',String(motionPaused));control.setAttribute('aria-label',motionPaused?'เล่นแอนิเมชันและข้อความคิตตี้':'พักแอนิเมชันและข้อความคิตตี้');control.innerHTML=icon(motionPaused?'play':'pause')}
   scheduleSpeech();
  }
- try{const active=localStorage.getItem(ACTIVE);if(active&&/^shiftplanner-codes-account:/.test(active))store=active;const c=localStorage.getItem(CONFIG);if(c){const parsed=JSON.parse(c);config=CodeCatalog.config(parsed.url,parsed.key)}}catch{}
+ try{const active=localStorage.getItem(ACTIVE);if(active&&/^shiftplanner-codes-account:/.test(active))store=active}catch{}
  function read(key){
   loadError='';rawBackup='';storageWarning='';stale=false;
   try{const raw=localStorage.getItem(key);if(!raw)return empty();rawBackup=raw;return CodeCatalog.document(JSON.parse(raw))}
@@ -202,7 +203,7 @@ const CodeLibrary=(()=>{
   const logged=!!session;
   const info=logged?'<div class="code-cloud-info"><b>'+esc(session.username)+'</b><p>'+esc(status())+'</p></div>':'<p class="account-intro">เข้าสู่ระบบเพื่อเปิดคลังโค้ดรหัสของคุณ</p>';
   const actions=`<div class="code-cloud-actions"><button class="primary" onclick="CodeLibrary.push()" ${busy?'disabled':''}>ส่งข้อมูลขึ้นออนไลน์</button><button onclick="CodeLibrary.pullPrompt()" ${busy?'disabled':''}>โหลดข้อมูลจากออนไลน์</button><button onclick="CodeLibrary.copyLocal()" ${busy?'disabled':''}>รวมรหัสจากคลังในเครื่อง</button><button onclick="CodeLibrary.logout()" ${busy?'disabled':''}>ออกจากระบบ</button></div><p class="help">กดส่งข้อมูลขึ้นออนไลน์หลังเพิ่มหรือแก้ไขรหัส เพื่อเปิดต่อบนเครื่องอื่นด้วยบัญชีเดิม</p>`;
-  const form=`<form id="cloudForm" class="code-form account-login-form" onsubmit="event.preventDefault();CodeLibrary.login()"><label class="field">Username<input id="cloudUsername" type="text" required minlength="3" maxlength="32" pattern="[A-Za-z][A-Za-z0-9._-]{2,31}" value="${esc(loginUsername)}" placeholder="teen" autocomplete="username" autocapitalize="none" spellcheck="false"></label><label class="field">Password<input id="cloudPassword" type="password" required minlength="6" autocomplete="current-password"></label><button class="primary account-submit" type="submit" ${busy?'disabled':''}>${busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}</button><details class="code-cloud-settings"><summary>ตั้งค่าโปรเจกต์ (สำหรับผู้พัฒนา)</summary><label class="field">Project URL<input id="cloudUrl" type="url" required value="${esc(config?.url||'')}" placeholder="https://your-project.supabase.co"></label><label class="field">Publishable key / anon key<input id="cloudKey" required value="${esc(config?.key||'')}" placeholder="sb_publishable_…" autocomplete="off"></label><p class="help">ตั้งค่าบัญชี Username ครั้งแรกตามไฟล์ ONLINE-DATABASE.md</p></details></form>`;
+  const form=`<form id="cloudForm" class="code-form account-login-form" onsubmit="event.preventDefault();CodeLibrary.login()"><label class="field">Username<input id="cloudUsername" type="text" required minlength="3" maxlength="32" pattern="[A-Za-z][A-Za-z0-9._-]{2,31}" value="${esc(loginUsername)}" placeholder="teen" autocomplete="username" autocapitalize="none" spellcheck="false"></label><label class="field">Password<input id="cloudPassword" type="password" required minlength="6" autocomplete="current-password"></label><button class="primary account-submit" type="submit" ${busy?'disabled':''}>${busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}</button></form>`;
   modal(logged?'บัญชีผู้ใช้':'เข้าสู่ระบบ',info+`<p id="cloudMessage" class="code-message" role="status">${esc(message)}</p>`+(logged?actions:form));
  }
  async function request(path,{method='GET',body,auth=true,retry=true}={}){
@@ -223,7 +224,7 @@ const CodeLibrary=(()=>{
   if(!response.ok){
    if(result?.code==='40001')throw Error('ข้อมูลออนไลน์เปลี่ยนจากเครื่องอื่น กรุณาสำรอง JSON ในเครื่อง แล้วโหลดข้อมูลออนไลน์ก่อนรวมรายการและส่งใหม่');
    if(result?.error_code==='email_not_confirmed')throw Error('บัญชียังไม่พร้อมใช้งาน กรุณาให้ผู้พัฒนายืนยันบัญชีใน Supabase ก่อน');
-   if(response.status===401||result?.error_code==='invalid_credentials'){if(auth){session=null;renderAccount()}throw Error('เข้าสู่ระบบไม่ได้ กรุณาตรวจ Username และ Password แล้วลองใหม่')}
+   if(response.status===401||result?.error_code==='invalid_credentials'){if(auth){session=null;renderAccount()}throw Error('เข้าสู่ระบบไม่ได้ Username หรือ Password ไม่ตรงกับบัญชีที่ตั้งไว้ หากยังไม่ได้สร้างบัญชี ให้ผู้ดูแลตั้งค่าบัญชีก่อน')}
    if(result?.code==='PGRST202'||result?.code==='42P01')throw Error('ยังไม่พบตารางหรือฟังก์ชัน กรุณารัน supabase/code-library.sql ใน SQL Editor ก่อน');
    throw Error('เชื่อมต่อไม่สำเร็จ: '+(result?.msg||result?.message||result?.error_description||response.status));
   }
@@ -236,17 +237,16 @@ const CodeLibrary=(()=>{
  }
  async function login(){
   if(busy||!$('cloudForm').reportValidity())return;
-  let next,identity;try{next=CodeCatalog.config($('cloudUrl').value,$('cloudKey').value);identity=CodeCatalog.loginIdentity($('cloudUsername').value,next.url)}catch(e){$('cloudMessage').textContent=e.message;return}
+  let identity;try{identity=CodeCatalog.loginIdentity($('cloudUsername').value,config.url)}catch(e){$('cloudMessage').textContent=e.message;return}
   const password=$('cloudPassword').value;
   if(password.length<6){$('cloudMessage').textContent='Password ต้องมีอย่างน้อย 6 ตัวอักษร';return}
   const {username,email}=identity;
-  loginUsername=username;config=next;$('cloudPassword').value='';
+  loginUsername=username;$('cloudPassword').value='';
   await operation(async()=>{
    const result=await request('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password},auth:false});
    if(typeof result?.user?.id!=='string'||!result.user.id||!result.access_token)throw Error('ข้อมูลเข้าสู่ระบบไม่ครบถ้วน');
    switchStore('shiftplanner-codes-account:'+config.url+':'+result.user.id);
    session={...result,username,user:{...result.user,email:result.user.email||email}};
-   try{localStorage.setItem(CONFIG,JSON.stringify(config))}catch{}
    // Read only on login; preserve unsent edits and the separate local library.
    if(loadError){message='เข้าสู่ระบบแล้ว · '+loadError;return}
    if(doc.dirty){message='เข้าสู่ระบบแล้ว มีข้อมูลแก้ไขในเครื่องที่ยังไม่ได้ส่ง กรุณาเลือกส่งขึ้นออนไลน์ หรือสำรองแล้วโหลดข้อมูล';return}
