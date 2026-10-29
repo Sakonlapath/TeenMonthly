@@ -224,8 +224,8 @@ dialog:has(.account-panel){max-width:540px;border:1px solid #ecd4e0;border-radiu
 dialog:has(.account-panel) .modal-head{padding:16px 22px;border-color:#f0dfe8;background:#fff5f9}
 dialog:has(.account-panel) .modal-head h2{color:#89455f;font-size:17px}
 dialog:has(.account-panel) .modal-head button{color:#996779;border-radius:9px}
-dialog:has(.account-panel) .modal-body{padding:22px;max-height:calc(90vh - 137px);max-height:calc(90dvh - 137px)}
-dialog:has(.account-panel) .modal-foot{padding:12px 22px;border-color:#f0dfe8;background:#fffafb}
+dialog:has(.account-panel) .modal-body{padding:22px;max-height:calc(90vh - 77px);max-height:calc(90dvh - 77px)}
+dialog:has(.account-panel) .modal-foot{display:none}
 .account-panel{font-size:14px;line-height:1.6}.account-panel .code-icon{width:20px;height:20px;flex-shrink:0}
 .account-welcome{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px}
 .account-avatar{display:grid;place-items:center;position:relative;flex-shrink:0;width:58px;height:58px;border:1px solid #efc8da;border-radius:20px;background:linear-gradient(140deg,#fff1f7,#f2e9fa);color:#af4776}
@@ -250,7 +250,6 @@ dialog:has(.account-panel) button.primary:hover{background:#a93160;border-color:
 .account-session-actions{display:flex;justify-content:flex-end;margin-top:19px;padding-top:12px;border-top:1px solid #efe1e9}
 dialog:has(.account-panel) .account-signout{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:8px 10px;background:transparent;border:1px solid transparent;border-radius:10px;color:#9b4864;font-size:12px}
 dialog:has(.account-panel) .account-signout:hover{background:#fff0f4;border-color:#ecc9d5}.account-signout .code-icon{width:17px;height:17px}
-dialog:has(.account-panel) .account-close{min-height:40px;padding:8px 17px;border:1px solid #e3c5d5;border-radius:10px;background:white;color:#80516c;font-size:13px}
 dialog:has(.account-panel) button:focus-visible{outline:2px solid #af4776;outline-offset:3px}.account-panel button:disabled{opacity:.55;cursor:wait}
 .account-panel .account-login-form{margin-top:21px}.account-panel .account-login-form .field{font-size:13px;margin-bottom:17px;color:#784b68}.account-panel .account-login-form input{min-height:46px;font-size:15px}.account-panel .account-login-form .account-submit{margin:7px 0 0}
 @media(max-width:480px){dialog:has(.account-panel) .modal-body{padding:18px 16px}.account-welcome{gap:11px}.account-welcome h3{font-size:21px}.account-signed-in{margin-left:69px;margin-top:-5px}.account-stats{gap:9px}.account-stats>div{padding:11px 13px}.account-secondary-actions{grid-template-columns:1fr}.account-secondary-actions>button{min-height:67px;padding:12px 14px}.account-action-icon{width:35px;height:35px}.account-session-actions{margin-top:16px}}

@@ -221,7 +221,8 @@ const CodeLibrary=(()=>{
   }else{
    content=`${intro}${notice}<form id="cloudForm" class="code-form account-login-form" onsubmit="event.preventDefault();CodeLibrary.login()"><label class="field">ชื่อผู้ใช้<input id="cloudUsername" type="text" required minlength="3" maxlength="32" pattern="[A-Za-z][A-Za-z0-9._-]{2,31}" value="${esc(loginUsername)}" placeholder="teen" autocomplete="username" autocapitalize="none" spellcheck="false" ${disabled}></label><div class="field"><label for="cloudPassword">รหัสผ่าน</label><div class="account-password"><input id="cloudPassword" type="password" required minlength="6" autocomplete="current-password" placeholder="กรอกรหัสผ่าน" ${disabled}><button id="cloudPasswordToggle" class="account-password-toggle" type="button" onclick="CodeLibrary.togglePassword()" aria-controls="cloudPassword" aria-label="แสดงรหัสผ่าน" aria-pressed="false" title="แสดงรหัสผ่าน" ${disabled}>${icon('eye')}</button></div></div><button class="primary account-submit" type="submit" ${disabled}>${busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}${icon('arrow')}</button></form>`;
   }
-  modal(logged?'บัญชีผู้ใช้':'เข้าสู่ระบบ',`<div class="account-panel" aria-busy="${busy}">${content}</div>`,'<button class="account-close" onclick="closeModal()">'+(logged?'กลับไปใช้งาน':'ปิด')+'</button>');
+  modal(logged?'บัญชีผู้ใช้':'เข้าสู่ระบบ',`<div class="account-panel" aria-busy="${busy}">${content}</div>`);
+  $('modalFoot').innerHTML='';
  }
  function togglePassword(){
   const input=$('cloudPassword'),button=$('cloudPasswordToggle');
