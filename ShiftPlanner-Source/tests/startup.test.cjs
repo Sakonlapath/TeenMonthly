@@ -60,6 +60,8 @@ run('onQuotaInput({value:"15"},"3")');assert.equal(element('categoryTotal-card')
 run('onQuotaChange("2","15");onQuotaChange("3","15");onQuotaChange("4","15");onQuotaChange("1","9");onQuotaChange("5","5");onQuotaChange("6","5");onQuotaChange("7","6");onQuotaChange("8","8")');
 assert(element('categoryTotals').innerHTML.includes('id="calendarTotal" aria-live="polite">99</strong>'));assert(!element('categoryTotals').innerHTML.includes('quotaTotal'));
 const index=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');assert(index.indexOf('id="navCodes"')<index.indexOf('id="navSchedule"'));assert.equal((index.match(/id="autoBtn"/g)||[]).length,1);assert(index.indexOf('id="autoBtn"')>index.indexOf('id="scheduleView"'));
+assert(index.includes('id="accountControls"'));assert(index.includes('class="header-login-button" onclick="CodeLibrary.cloud()"'));
+assert(!index.includes('class="header-note"'));assert.equal((index.match(/id="saveStatus"/g)||[]).length,1);
 assert(element('scheduleTable').innerHTML.includes('data-quota-id="3"'));
 assert(!element('scheduleTable').innerHTML.includes('<tfoot>'));
 assert(element('scheduleTable').innerHTML.endsWith('</tbody>'));

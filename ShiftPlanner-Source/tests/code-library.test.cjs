@@ -25,6 +25,8 @@ function unzipStored(bytes){
 }
 async function main(){
  const b=boot();const model=b.run('CodeCatalog');
+ assert(b.$('accountControls').innerHTML.includes('header-login-button'));
+ assert(!b.$('accountControls').innerHTML.includes('header-logout-button'));
  assert.throws(()=>b.run('CodeLibrary.lookup("")'));
  // A large library stays bounded, while search, filters and export use every record.
  const hundred=Array.from({length:100},(_,i)=>row('A'+String(i+1).padStart(3,'0'),{favorite:i>=96,note:i>=96?'ท้ายคลัง':''}));
@@ -269,6 +271,9 @@ async function main(){
  c.$('cloudUrl').value='https://test.supabase.co';c.$('cloudKey').value='sb_publishable_test';c.$('cloudEmail').value='test@example.com';c.$('cloudPassword').value='fake-test-password';
  await c.run('CodeLibrary.login()');
  assert(c.$('modalBody').innerHTML.includes('test@example.com'));
+ assert(c.$('accountControls').innerHTML.includes('test@example.com'));
+ assert(c.$('accountControls').innerHTML.includes('header-logout-button'));
+ assert.equal(c.$('cloudPassword').value,'');
  c.run('CodeLibrary.copyLocal()');c.form(row('A01',{note:'second online entry'}));c.run('CodeLibrary.save("")');await c.run('CodeLibrary.push()');
  assert.equal(cloud.revision,1);assert.equal(cloud.records[0].code,'A01');
  assert.equal(cloud.records.length,2);assert.notEqual(cloud.records[0].id,cloud.records[1].id);
@@ -287,7 +292,46 @@ async function main(){
  expire=true;await c.run('CodeLibrary.push()');assert(calls.some(r=>r.url.includes('grant_type=refresh_token')));assert.equal(cloud.revision,3);
  fail=true;c.form(row('B02',{note:'offline survives'}));c.run('CodeLibrary.save('+JSON.stringify(c.idFor('B02'))+')');await c.run('CodeLibrary.push()');
  assert.equal(JSON.parse(c.storage.get(account)).dirty,true);assert.equal(cloud.revision,3);
- fail=false;await c.run('CodeLibrary.logout()');c.run('CodeLibrary.local()');assert(c.$('codeResults').innerHTML.includes('A01'));
+ fail=false;await c.run('CodeLibrary.logout()');assert(c.$('codeResults').innerHTML.includes('A01'));
+ assert(c.$('accountControls').innerHTML.includes('header-login-button'));assert(!c.$('accountControls').innerHTML.includes('test@example.com'));
+ assert(calls.some(r=>r.url.endsWith('/auth/v1/logout?scope=local')));
+ assert.equal(JSON.parse(c.storage.get(account)).records[0].note,'offline survives');
+ // Login reads the authenticated account only, preserving unsent edits and local data.
+ const authUrl='https://test.supabase.co',authKey='shiftplanner-codes-account:'+authUrl+':user1';
+ const authForm=client=>{client.run('CodeLibrary.cloud()');client.$('cloudUrl').value=authUrl;client.$('cloudKey').value='sb_publishable_test';client.$('cloudEmail').value='test@example.com';client.$('cloudPassword').value='not-a-real-password'};
+ const reply=(status,data)=>({ok:status>=200&&status<300,status,json:async()=>data});
+ const loginResult={access_token:'token',refresh_token:'refresh',user:{id:'user1',email:'test@example.com'}};
+ let authFailure=false,readFailure=false,authReads=0,authWrites=0;
+ const authFetch=async(url,options)=>{
+  if(url.includes('/auth/v1/token'))return authFailure?reply(401,{}):reply(200,loginResult);
+  if(url.includes('/rest/v1/code_libraries')){authReads++;if(readFailure)throw Error('offline');assert(url.endsWith('owner_id=eq.user1'));return reply(200,[{records:[row('Z99',{note:'account data'})],revision:4}])}
+  authWrites++;return reply(200,null);
+ };
+ const cleanLogin=boot({storage:new Map([[LOCAL,serialized([row('L01')])],[authKey,serialized([row('A01')],{dirty:false,revision:2})]]),fetch:authFetch});
+ authForm(cleanLogin);await cleanLogin.run('CodeLibrary.login()');
+ assert.equal(cleanLogin.$('modalTitle').textContent,'บัญชีผู้ใช้');
+ assert.equal(JSON.parse(cleanLogin.storage.get(authKey)).records[0].code,'Z99');
+ assert.equal(JSON.parse(cleanLogin.storage.get(LOCAL)).records[0].code,'L01');assert.equal(authWrites,0,'login never uploads');
+ const pendingLogin=boot({storage:new Map([[authKey,serialized([row('P01')])]]),fetch:authFetch});
+ const readsBeforePending=authReads;authForm(pendingLogin);await pendingLogin.run('CodeLibrary.login()');
+ assert.equal(authReads,readsBeforePending);assert.equal(JSON.parse(pendingLogin.storage.get(authKey)).records[0].code,'P01');
+ assert(pendingLogin.$('modalBody').innerHTML.includes('ยังไม่ได้ส่ง'));
+ authFailure=true;
+ const wrongLogin=boot({storage:new Map([[LOCAL,serialized([row('L01')])]]),fetch:authFetch});
+ authForm(wrongLogin);await wrongLogin.run('CodeLibrary.login()');
+ assert(wrongLogin.$('accountControls').innerHTML.includes('header-login-button'));
+ assert.equal(wrongLogin.storage.get(authKey),undefined);assert.equal(wrongLogin.$('cloudPassword').value,'');
+ assert(wrongLogin.$('modalBody').innerHTML.includes('เข้าสู่ระบบไม่ได้'));assert(wrongLogin.$('modalBody').innerHTML.includes('value="test@example.com"'));
+ authFailure=false;readFailure=true;
+ const offlineLogin=boot({storage:new Map([[authKey,serialized([row('K01')],{dirty:false})]]),fetch:authFetch});
+ authForm(offlineLogin);await offlineLogin.run('CodeLibrary.login()');
+ assert(offlineLogin.$('accountControls').innerHTML.includes('test@example.com'));assert(offlineLogin.$('modalBody').innerHTML.includes('โหลดคลังไม่ได้'));
+ assert.equal(JSON.parse(offlineLogin.storage.get(authKey)).records[0].code,'K01');
+ // Failed refresh expires the header login without discarding cached edits.
+ offlineLogin.ctx.fetch=async(url)=>url.includes('grant_type=refresh_token')?reply(400,{}):reply(401,{});
+ await offlineLogin.run('CodeLibrary.push()');assert(offlineLogin.$('accountControls').innerHTML.includes('header-login-button'));
+ assert.equal(JSON.parse(offlineLogin.storage.get(authKey)).records[0].code,'K01');
+ for(const client of [cleanLogin,pendingLogin,wrongLogin,offlineLogin])assert(![...client.storage.values()].join('').includes('not-a-real-password'));
  const sql=fs.readFileSync(path.join(root,'supabase/code-library.sql'),'utf8');
  assert(sql.includes('enable row level security'));assert(sql.includes('security invoker'));assert(sql.includes("errcode = '40001'"));assert(sql.includes('and revision = expected_revision'));
  console.log('PASS: duplicate-code entries, independent editing/deletion, stable legacy migration, duplicate-safe JSON/Excel/cloud roundtrip, filtering, escaped notes, tab conflicts, recovery, cloud auth and offline preservation');
