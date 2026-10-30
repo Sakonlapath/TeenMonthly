@@ -322,7 +322,7 @@ const CodeLibrary=(()=>{
    if(doc.dirty){message='เข้าสู่ระบบแล้ว กำลังเตรียมส่งข้อมูลที่ยังไม่ได้ส่งจากเครื่องนี้อัตโนมัติ';return}
    try{
     const remote=await readRemote();
-    if(remote){persist(remote);page=1;message='เข้าสู่ระบบแล้ว โหลดคลัง '+doc.records.length+' รหัสเรียบร้อย'}
+    if(remote){persist(remote);page=1;message='';toast('เข้าสู่ระบบแล้ว โหลดคลัง '+doc.records.length+' รหัสเรียบร้อย',true)}
     else message='';
    }catch(e){message=session?'เข้าสู่ระบบแล้ว แต่โหลดคลังไม่ได้: '+e.message:'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่'}
   });

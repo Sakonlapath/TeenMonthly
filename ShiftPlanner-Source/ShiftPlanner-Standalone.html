@@ -621,6 +621,9 @@ dialog button.code-danger-button:hover,.code-danger-button:hover{background:#ffd
 .account-password{position:relative;width:100%;min-width:0}.account-login-form .account-password input{width:100%;min-width:0;padding-right:52px;box-sizing:border-box}.account-login-form .account-password-toggle{position:absolute;right:3px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:42px;min-height:38px;padding:8px;margin:0;border:0;border-radius:9px;background:transparent;color:#a44772}.account-login-form .account-password-toggle:hover{background:#fce4ef}.account-password-toggle .code-icon{width:21px;height:21px}.account-password-toggle:focus-visible{outline:2px solid #a44772;outline-offset:1px}
 @media print{.header-account{display:none!important}}
 /* Account dialog: one primary action, readable sync status, and separate session controls. */
+.toast.toast-top{position:fixed;top:max(16px,env(safe-area-inset-top));bottom:auto;left:50%;right:auto;margin:0;width:max-content;max-width:min(90vw,520px);padding:13px 20px;border:1px solid #dfb6cc;border-radius:14px;background:#fff2f8;color:#854160;box-shadow:0 8px 30px #75365125;font-size:14px;text-align:center;pointer-events:none;animation:account-toast-drop 4.5s both}
+@keyframes account-toast-drop{0%{opacity:0;transform:translate(-50%,-30px)}8%,90%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-12px)}}
+@media(prefers-reduced-motion:reduce){.toast.toast-top{animation:none;transform:translateX(-50%)}}
 dialog:has(.account-panel){max-width:540px;border:1px solid #ecd4e0;border-radius:24px;background:#fffcfd;color:#674355}
 dialog:has(.account-panel) .modal-head{padding:16px 22px;border-color:#f0dfe8;background:#fff5f9}
 dialog:has(.account-panel) .modal-head h2{color:#89455f;font-size:17px}
@@ -1418,7 +1421,23 @@ function checkpoint(){history.push(clone(state));if(history.length>25)history.sh
 function normalizeCalendarState(s){let changed=false;for(const month of Object.keys(s.months))if(normalizeCalendarDemand(s,month))changed=true;return changed}
 function changed(){normalizeCalendarState(state);save();render()}
 function undo(){if(!history.length)return;state=history.pop();changed();toast('ย้อนการแก้ไขแล้ว')}
-function toast(s){$('toast').textContent=s;$('toast').classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),4500)}
+function toast(s,fromTop=false){
+ const notice=$('toast');clearTimeout(toastTimer);
+ if(notice.hasAttribute?.('popover')&&notice.matches(':popover-open'))notice.hidePopover();
+ if(notice.hasAttribute?.('popover'))notice.removeAttribute('popover');
+ if(notice.parentElement?.tagName==='DIALOG')document.body.appendChild(notice);
+ notice.classList.remove('toast-top');notice.textContent=s;notice.classList.remove('hidden');
+ if(fromTop){
+  void notice.offsetWidth;notice.classList.add('toast-top');
+  if(typeof notice.showPopover==='function'){notice.setAttribute('popover','manual');notice.showPopover()}
+  else if($('modal').open)$('modal').appendChild(notice);
+ }
+ toastTimer=setTimeout(()=>{
+  if(notice.hasAttribute?.('popover')&&notice.matches(':popover-open'))notice.hidePopover();
+  notice.classList.add('hidden');
+  if(notice.parentElement?.tagName==='DIALOG')document.body.appendChild(notice);
+ },4500);
+}
 function view(v){if(typeof cancelPaint==='function')cancelPaint();currentView=v;for(const [name,id]of [['schedule','Schedule'],['summary','Summary'],['codes','Codes']]){const section=$(name==='codes'?'codesView':name+'View'),button=$('nav'+id);if(section)section.classList.toggle('hidden',v!==name);if(button)button.classList.toggle('active',v===name)}if(typeof CodeLibrary!=='undefined'){if(v==='codes')CodeLibrary.render();else CodeLibrary.suspend()}}
 function selectMonth(m){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)||+m.slice(0,4)<1900||+m.slice(0,4)>2200){toast('เลือกปี ค.ศ. 1900–2200');return}if(typeof cancelPaint==='function')cancelPaint();state.selected=m;if(!state.months[m])state.months[m]=freshMonth(m);changed()}
 function changeMonth(off){selectMonth(monthOffset(state.selected,off))}
@@ -2399,7 +2418,7 @@ const CodeLibrary=(()=>{
    if(doc.dirty){message='เข้าสู่ระบบแล้ว กำลังเตรียมส่งข้อมูลที่ยังไม่ได้ส่งจากเครื่องนี้อัตโนมัติ';return}
    try{
     const remote=await readRemote();
-    if(remote){persist(remote);page=1;message='เข้าสู่ระบบแล้ว โหลดคลัง '+doc.records.length+' รหัสเรียบร้อย'}
+    if(remote){persist(remote);page=1;message='';toast('เข้าสู่ระบบแล้ว โหลดคลัง '+doc.records.length+' รหัสเรียบร้อย',true)}
     else message='';
    }catch(e){message=session?'เข้าสู่ระบบแล้ว แต่โหลดคลังไม่ได้: '+e.message:'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่'}
   });

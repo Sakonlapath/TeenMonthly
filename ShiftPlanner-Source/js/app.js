@@ -29,7 +29,23 @@ function checkpoint(){history.push(clone(state));if(history.length>25)history.sh
 function normalizeCalendarState(s){let changed=false;for(const month of Object.keys(s.months))if(normalizeCalendarDemand(s,month))changed=true;return changed}
 function changed(){normalizeCalendarState(state);save();render()}
 function undo(){if(!history.length)return;state=history.pop();changed();toast('ย้อนการแก้ไขแล้ว')}
-function toast(s){$('toast').textContent=s;$('toast').classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),4500)}
+function toast(s,fromTop=false){
+ const notice=$('toast');clearTimeout(toastTimer);
+ if(notice.hasAttribute?.('popover')&&notice.matches(':popover-open'))notice.hidePopover();
+ if(notice.hasAttribute?.('popover'))notice.removeAttribute('popover');
+ if(notice.parentElement?.tagName==='DIALOG')document.body.appendChild(notice);
+ notice.classList.remove('toast-top');notice.textContent=s;notice.classList.remove('hidden');
+ if(fromTop){
+  void notice.offsetWidth;notice.classList.add('toast-top');
+  if(typeof notice.showPopover==='function'){notice.setAttribute('popover','manual');notice.showPopover()}
+  else if($('modal').open)$('modal').appendChild(notice);
+ }
+ toastTimer=setTimeout(()=>{
+  if(notice.hasAttribute?.('popover')&&notice.matches(':popover-open'))notice.hidePopover();
+  notice.classList.add('hidden');
+  if(notice.parentElement?.tagName==='DIALOG')document.body.appendChild(notice);
+ },4500);
+}
 function view(v){if(typeof cancelPaint==='function')cancelPaint();currentView=v;for(const [name,id]of [['schedule','Schedule'],['summary','Summary'],['codes','Codes']]){const section=$(name==='codes'?'codesView':name+'View'),button=$('nav'+id);if(section)section.classList.toggle('hidden',v!==name);if(button)button.classList.toggle('active',v===name)}if(typeof CodeLibrary!=='undefined'){if(v==='codes')CodeLibrary.render();else CodeLibrary.suspend()}}
 function selectMonth(m){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)||+m.slice(0,4)<1900||+m.slice(0,4)>2200){toast('เลือกปี ค.ศ. 1900–2200');return}if(typeof cancelPaint==='function')cancelPaint();state.selected=m;if(!state.months[m])state.months[m]=freshMonth(m);changed()}
 function changeMonth(off){selectMonth(monthOffset(state.selected,off))}

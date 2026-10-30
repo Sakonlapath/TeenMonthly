@@ -220,6 +220,9 @@ dialog button.code-danger-button:hover,.code-danger-button:hover{background:#ffd
 .account-password{position:relative;width:100%;min-width:0}.account-login-form .account-password input{width:100%;min-width:0;padding-right:52px;box-sizing:border-box}.account-login-form .account-password-toggle{position:absolute;right:3px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:42px;min-height:38px;padding:8px;margin:0;border:0;border-radius:9px;background:transparent;color:#a44772}.account-login-form .account-password-toggle:hover{background:#fce4ef}.account-password-toggle .code-icon{width:21px;height:21px}.account-password-toggle:focus-visible{outline:2px solid #a44772;outline-offset:1px}
 @media print{.header-account{display:none!important}}
 /* Account dialog: one primary action, readable sync status, and separate session controls. */
+.toast.toast-top{position:fixed;top:max(16px,env(safe-area-inset-top));bottom:auto;left:50%;right:auto;margin:0;width:max-content;max-width:min(90vw,520px);padding:13px 20px;border:1px solid #dfb6cc;border-radius:14px;background:#fff2f8;color:#854160;box-shadow:0 8px 30px #75365125;font-size:14px;text-align:center;pointer-events:none;animation:account-toast-drop 4.5s both}
+@keyframes account-toast-drop{0%{opacity:0;transform:translate(-50%,-30px)}8%,90%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-12px)}}
+@media(prefers-reduced-motion:reduce){.toast.toast-top{animation:none;transform:translateX(-50%)}}
 dialog:has(.account-panel){max-width:540px;border:1px solid #ecd4e0;border-radius:24px;background:#fffcfd;color:#674355}
 dialog:has(.account-panel) .modal-head{padding:16px 22px;border-color:#f0dfe8;background:#fff5f9}
 dialog:has(.account-panel) .modal-head h2{color:#89455f;font-size:17px}
