@@ -30,6 +30,13 @@ async function main(){
   assert.equal(b.run('state.people[0].prefix'),'นางสาว');
   b.run('var baselineSolved=solve(state,state.selected,{distribution:true});if(!baselineSolved.ok)throw Error(baselineSolved.message)');
   assert.equal(b.run('audit({...state,months:{[state.selected]:baselineSolved.month}},state.selected).complete'),true,'the actual eight-person roster still schedules correctly');
+  b.run('activeMonth().cells={"1|1":{code:"N"},"1|3":{code:"A"},"1|8":{code:"M"},"1|10":{code:"R"},"1|12":{code:"X"},"1|15":{code:"",block:"OFF"}};Personnel.open()');b.fields();
+  const beforeEstimate=b.run('JSON.stringify(state)');b.run('Personnel.useSchedule()');
+  assert.equal(b.element('personnelCount-card').value,'3');assert.equal(b.element('personnelCount-dawn').value,'2');assert.equal(b.element('personnelPreview').textContent,'1,680');
+  b.element('personnelCount-card').value='12';b.element('personnelCount-dawn').value='5';b.run('Personnel.preview()');assert.equal(b.element('personnelPreview').textContent,'6,540');
+  b.element('personnelRate-card').value='650';b.run('Personnel.preview()');assert.equal(b.element('personnelPreview').textContent,'8,100','rate changes recalculate the chosen counts');
+  b.element('personnelCount-card').value='-1';b.run('Personnel.preview()');assert.equal(b.element('personnelPreview').textContent,'—');
+  assert.equal(b.run('JSON.stringify(state)'),beforeEstimate,'calculator never changes shifts, saved rates or account data');b.run('closeModal()');
   await assert.rejects(()=>b.run('CodeLibrary.personnel()'),/เข้าสู่ระบบ/);
   await login(b);assert.equal(b.run('state.people.length'),9);assert.equal(JSON.parse(remote.profileJson).people[8].id,'9');
   b.run('Personnel.open()');b.fields();b.element('personnelName').value='Private core';b.run('Personnel.add()');

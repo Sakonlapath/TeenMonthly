@@ -1,6 +1,11 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const c=require('../js/core'),m=require('../js/personnel-model');
 const seed=vm.runInNewContext(fs.readFileSync(require.resolve('../js/data.js'),'utf8')+';JSON.parse(JSON.stringify(SEED))');
+assert.deepEqual(m.estimate({card:520,dawn:60},{card:12,dawn:5},31),{card:6240,dawn:300,total:6540,count:17});
+assert.deepEqual(m.estimate({card:500.25,dawn:80.35},{card:3,dawn:2},28),{card:1500.75,dawn:160.7,total:1661.45,count:5});
+assert.equal(m.estimate({card:0,dawn:0},{card:0,dawn:0},28).total,0);
+for(const counts of [{card:-1,dawn:0},{card:1.5,dawn:2},{card:20,dawn:20},{card:NaN,dawn:0}])assert.throws(()=>m.estimate({card:520,dawn:60},counts,31),/จำนวนเวร/);
+assert.throws(()=>m.estimate({card:520.001,dawn:60},{card:12,dawn:5},31),/เรท/);
 let p=m.defaults(seed,'other');
 assert.equal(p.people.length,8,'a new account starts with the eight core people');
 assert.equal(p.people[0].prefix,'นางสาว');assert.equal(p.people[0].plainName,'พฤกษา ชาวไพร');

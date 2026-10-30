@@ -44,6 +44,12 @@ const PersonnelModel=(()=>{
   s.payRates={...Object.fromEntries(retained.map(p=>[p.id,s.payRates[p.id]])),...copy(profile.payRates)};
   return s;
  }
- return {coreIds,splitName,person,validate,defaults,fromState,apply};
+ function estimate(rates,counts,days){
+  if(!Number.isInteger(days)||days<1||['card','dawn'].some(k=>!Number.isInteger(counts[k])||counts[k]<0||counts[k]>days)||counts.card+counts.dawn>days)throw Error('จำนวนเวรต้องเป็นจำนวนเต็ม 0–'+days+' และรวมไม่เกิน '+days+' เวร');
+  if(['card','dawn'].some(k=>!Number.isFinite(rates[k])||rates[k]<0||rates[k]>10000||Math.abs(rates[k]*100-Math.round(rates[k]*100))>1e-7))throw Error('กรอกเรทเงิน 0–10,000 บาท ทศนิยมไม่เกิน 2 ตำแหน่ง');
+  const card=Math.round(rates.card*100)*counts.card,dawn=Math.round(rates.dawn*100)*counts.dawn;
+  return {card:card/100,dawn:dawn/100,total:(card+dawn)/100,count:counts.card+counts.dawn};
+ }
+ return {coreIds,splitName,person,validate,defaults,fromState,apply,estimate};
 })();
 if(typeof module!=='undefined')module.exports=PersonnelModel;
