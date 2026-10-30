@@ -426,6 +426,54 @@ async function main(){
  assert.equal(JSON.parse(resumed.storage.get(LOCAL)).records[0].code,'L01');
  assert.equal(JSON.parse(resumed.storage.get(authKey)).dirty,false);
  console.log('PASS: automatic cross-device saves, concurrent edits, reconnect retry, logout flush, conflict protection and resumed pending data');
+ // Remembered account caches stay locked after a refresh, with every data entry point guarded.
+ const privateCache=serialized([row('T91',{id:'private-entry',disease:'Private teen record',note:'Owner only'})]);
+ const lockedStorage=new Map([[authKey,privateCache],[LOCAL,serialized([row('L01')])],['shiftplanner-codes-active-v1',authKey]]);
+ let lockedRequests=0,chatClears=0;
+ syncCloud={revision:0,records:[]};
+ const locked=boot({storage:lockedStorage,fetch:async(...args)=>{lockedRequests++;return syncFetch(...args)}});
+ locked.ctx.clearDiseaseChat=()=>{chatClears++};
+ assert(locked.$('codesView').innerHTML.includes('code-account-locked'));
+ assert(!locked.$('codesView').innerHTML.includes('Private teen record'));
+ assert.throws(()=>locked.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/);
+ locked.form(row('T91',{note:'unauthenticated tampering'}));
+ for(const action of ['edit("private-entry")','save("private-entry")','confirmRemove("private-entry")','favorite("private-entry")','detail("private-entry")','backup()','excel(false)','files()','removeAll()','confirmRemoveAll()','confirmRecover()','search("T91")','category("T")','openSearch("T91")','push()','pull()','copyLocal()'])await locked.run('CodeLibrary.'+action);
+ locked.ctx.lockedFile={size:100,text:async()=>JSON.stringify(model.backup([row('X88')]))};
+ await locked.run('CodeLibrary.importFile({files:[lockedFile],value:""})');
+ assert.equal(lockedRequests,0);assert.equal(locked.downloads.length,0);assert.equal(locked.storage.get(authKey),privateCache);
+ authForm(locked);await locked.run('CodeLibrary.login()');
+ assert.equal(locked.run('CodeLibrary.lookup("T91")[0].note'),'Owner only');
+ assert(chatClears>0);await tickSync(locked);assert.equal(syncCloud.records[0].note,'Owner only');
+ // Page navigation / back-forward cache cannot keep a previous in-memory login usable.
+ const cachedBeforeLock=locked.storage.get(authKey),requestsBeforeLock=lockedRequests;
+ locked.run('CodeLibrary.edit("private-entry")');locked.events.pagehide();
+ assert.equal(locked.$('modal').open,false);assert.equal(locked.$('modalBody').innerHTML,'');
+ assert(locked.$('codesView').innerHTML.includes('code-account-locked'));assert(chatClears>=2);
+ assert.throws(()=>locked.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/);
+ locked.run('CodeLibrary.save("private-entry");CodeLibrary.backup();CodeLibrary.confirmRemove("private-entry")');
+ locked.events.online();locked.events.focus();assert.equal(lockedRequests,requestsBeforeLock);assert.equal(locked.storage.get(authKey),cachedBeforeLock);
+ authForm(locked);await locked.run('CodeLibrary.login()');assert.equal(locked.run('CodeLibrary.lookup("T91")[0].note'),'Owner only');
+ // Authentication expiry hides account records and blocks exports and stale editor submissions.
+ locked.ctx.fetch=async(url)=>url.includes('grant_type=refresh_token')?reply(400,{}):reply(401,{});
+ await locked.run('CodeLibrary.push()');
+ assert(locked.$('codesView').innerHTML.includes('code-account-locked'));assert.equal(locked.$('modalBody').innerHTML,'');
+ assert.throws(()=>locked.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/);
+ const downloadsBeforeExpiry=locked.downloads.length;
+ locked.run('CodeLibrary.backup();CodeLibrary.excel(false);CodeLibrary.confirmRecover()');
+ assert.equal(locked.downloads.length,downloadsBeforeExpiry);assert.equal(locked.storage.get(authKey),cachedBeforeLock);
+ // Another authenticated identity must not open or upload teen's cached records.
+ const other=boot({storage:new Map(lockedStorage),fetch:async(url)=>url.includes('/auth/v1/token')?reply(200,{...loginResult,user:{id:'other-user'}}):reply(200,[])});
+ authForm(other);other.$('cloudUsername').value='other';await other.run('CodeLibrary.login()');
+ assert.equal(other.run('CodeLibrary.lookup("T91").length'),0);assert.equal(other.storage.get(authKey),cachedBeforeLock);
+ // A delayed login response after navigating away must not silently restore a session.
+ let finishLogin;
+ const abandoned=boot({storage:new Map(lockedStorage),fetch:()=>new Promise(resolve=>{finishLogin=resolve})});
+ authForm(abandoned);const abandonedLogin=abandoned.run('CodeLibrary.login()');
+ abandoned.events.pagehide();finishLogin(reply(200,loginResult));await abandonedLogin;
+ assert(abandoned.$('codesView').innerHTML.includes('code-account-locked'));
+ assert.throws(()=>abandoned.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/);
+ assert.equal(abandoned.storage.get(authKey),cachedBeforeLock);
+ console.log('PASS: account cache locks on refresh, navigation and expiry; unauthenticated reads/writes/export blocked; owner re-login restores data');
  const sql=fs.readFileSync(path.join(root,'supabase/code-library.sql'),'utf8');
  assert(sql.includes('enable row level security'));assert(sql.includes('security invoker'));assert(sql.includes("errcode = '40001'"));assert(sql.includes('and revision = expected_revision'));
  console.log('PASS: duplicate-code entries, independent editing/deletion, stable legacy migration, duplicate-safe JSON/Excel/cloud roundtrip, filtering, escaped notes, tab conflicts, recovery, cloud auth and offline preservation');

@@ -10,6 +10,7 @@ const CodeLibrary=(()=>{
  const backedUpRecords=new Map();let pendingClear=null;
  let loginUsername='teen';
  let autoSyncTimer,autoSyncTask=null,autoSyncError='',autoSyncBlocked=false,autoSyncRetries=0;
+ let authEpoch=0;
  const pageSize=12;
  let motionPaused=false,favoritesOnly=false,speechIndex=0,speechTimer;
  const speeches=['สวัสดีคนเก่งของเค้า','สู้ๆนะไอ้อ้วงง','เค้ารักอ้วนที่สุดในโลกเลยย','มากอดหน่อย','คนเก่งของเค้า','หอมแก้มม.'];
@@ -44,13 +45,24 @@ const CodeLibrary=(()=>{
   scheduleSpeech();
  }
  try{const active=localStorage.getItem(ACTIVE);if(active&&/^shiftplanner-codes-account:/.test(active))store=active}catch{}
+ function accountLocked(){return store!==LOCAL&&(!session||store!=='shiftplanner-codes-account:'+config.url+':'+session.user.id)}
+ function requireAccountAccess(){if(accountLocked())throw Error('กรุณาเข้าสู่ระบบก่อนเปิดหรือแก้ไขคลังบัญชี')}
+ function clearAccountChat(){if(typeof clearDiseaseChat==='function')clearDiseaseChat()}
+ function lockAccount(){
+  authEpoch++;session=null;cancelAutoSync();pendingClear=null;clearAccountChat();
+  if($('modal').open)closeModal();
+  $('modalBody').innerHTML='';$('modalFoot').innerHTML='';
+  message='กรุณาเข้าสู่ระบบใหม่เพื่อเปิดคลังบัญชี';render();
+ }
  function read(key){
   loadError='';rawBackup='';storageWarning='';stale=false;
   try{const raw=localStorage.getItem(key);if(!raw)return empty();rawBackup=raw;return CodeCatalog.document(JSON.parse(raw))}
   catch(e){loadError='เปิดคลังรหัสที่บันทึกไม่ได้: '+e.message+' กรุณาดาวน์โหลดข้อมูลเดิมก่อนเริ่มคลังใหม่';return empty()}
  }
- doc=read(store);
+ // A remembered library identifier is not authentication. Read its cache only after login.
+ doc=accountLocked()?empty():read(store);
  function persist(next){
+  requireAccountAccess();
   if(loadError)throw Error(loadError);
   next=CodeCatalog.document(next);
   try{
@@ -64,8 +76,11 @@ const CodeLibrary=(()=>{
   doc=next;
  }
  function switchStore(next){
+  if(next!==LOCAL&&(!session||next!=='shiftplanner-codes-account:'+config.url+':'+session.user.id))throw Error('กรุณาเข้าสู่ระบบก่อนเปิดคลังบัญชี');
+  // Re-authenticating the same owner must preserve memory-only edits when storage is full.
+  if(next===store&&next!==LOCAL&&storageWarning){cancelAutoSync();autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;pendingClear=null;clearAccountChat();return}
   if(storageWarning){persist(doc);if(storageWarning)throw Error('ยังบันทึกคลังปัจจุบันในเครื่องไม่ได้ กรุณาสำรอง JSON ก่อนรีเฟรช แล้วนำเข้าไฟล์สำรองเมื่อมีพื้นที่เพียงพอ')}
-  cancelAutoSync();autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;
+  cancelAutoSync();autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;clearAccountChat();
   store=next;doc=read(store);try{localStorage.setItem(ACTIVE,store)}catch{}page=1;category=[];query='';kind=[];favoritesOnly=false;message='';pendingClear=null;
  }
  function commit(rows){if(busy)throw Error('รอการเชื่อมต่อให้เสร็จก่อน');persist({...doc,records:rows,dirty:true});page=1;message='';scheduleAutoSync();render()}
@@ -122,6 +137,7 @@ const CodeLibrary=(()=>{
   $('codeCount').scrollIntoView?.({block:'start'});
  }
  function status(){
+  if(accountLocked())return 'คลังบัญชีถูกล็อก · กรุณาเข้าสู่ระบบ';
   if(loadError)return loadError;
   if(storageWarning)return storageWarning;
   if(store===LOCAL)return 'บันทึกเฉพาะเครื่องนี้ · '+doc.records.length+' รายการ';
@@ -136,6 +152,11 @@ const CodeLibrary=(()=>{
  function render(){
   renderAccount();
   const host=$('codesView');if(!host)return;
+  if(accountLocked()){
+   suspend();
+   host.innerHTML='<div class="panel code-account-locked"><span class="code-lock-icon" aria-hidden="true">'+icon('user')+'</span><h2>เข้าสู่ระบบเพื่อเปิดคลังของคุณ</h2><p>ข้อมูลบัญชีจะเปิดให้ใช้งานหลังเข้าสู่ระบบเท่านั้น</p><button class="primary" onclick="CodeLibrary.cloud()">เข้าสู่ระบบ</button></div>';
+   return;
+  }
   const counts=Object.fromEntries('ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c=>[c,doc.records.filter(r=>r.code[0]===c).length]));
   host.innerHTML=`<div class="panel kitty-library">
    <div class="kitty-hero">
@@ -289,12 +310,12 @@ const CodeLibrary=(()=>{
     const refreshed=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token},auth:false});
     if(!refreshed?.access_token||refreshed.user?.id!==session.user.id)throw Error('กรุณาเข้าสู่ระบบใหม่');
     session={...refreshed,username:session.username};return request(path,{method,body,auth,retry:false});
-   }catch(e){session=null;renderAccount();throw e}
+   }catch(e){lockAccount();throw e}
   }
   if(!response.ok){
    if(result?.code==='40001')throw Object.assign(Error('ข้อมูลออนไลน์เปลี่ยนจากเครื่องอื่น กรุณาสำรอง JSON ในเครื่อง แล้วโหลดข้อมูลออนไลน์ก่อนรวมรายการและส่งใหม่'),{code:'40001'});
    if(result?.error_code==='email_not_confirmed')throw Error('บัญชียังไม่พร้อมใช้งาน กรุณาให้ผู้พัฒนายืนยันบัญชีใน Supabase ก่อน');
-   if(response.status===401||result?.error_code==='invalid_credentials'){if(auth){session=null;renderAccount()}throw Error('เข้าสู่ระบบไม่ได้ Username หรือ Password ไม่ตรงกับบัญชีที่ตั้งไว้ หากยังไม่ได้สร้างบัญชี ให้ผู้ดูแลตั้งค่าบัญชีก่อน')}
+   if(response.status===401||result?.error_code==='invalid_credentials'){if(auth)lockAccount();throw Error('เข้าสู่ระบบไม่ได้ Username หรือ Password ไม่ตรงกับบัญชีที่ตั้งไว้ หากยังไม่ได้สร้างบัญชี ให้ผู้ดูแลตั้งค่าบัญชีก่อน')}
    if(result?.code==='PGRST202'||result?.code==='42P01')throw Error('ยังไม่พบตารางหรือฟังก์ชัน กรุณารัน supabase/code-library.sql ใน SQL Editor ก่อน');
    throw Object.assign(Error('เชื่อมต่อไม่สำเร็จ: '+(result?.msg||result?.message||result?.error_description||response.status)),{retryable:response.status===429||response.status>=500});
   }
@@ -311,12 +332,15 @@ const CodeLibrary=(()=>{
   const password=$('cloudPassword').value;
   if(password.length<6){$('cloudMessage').textContent='Password ต้องมีอย่างน้อย 6 ตัวอักษร';return}
   const {username,email}=identity;
+  const attemptEpoch=authEpoch;
   loginUsername=username;$('cloudPassword').value='';
   await operation(async()=>{
    const result=await request('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password},auth:false});
+   if(attemptEpoch!==authEpoch)throw Error('กรุณาเข้าสู่ระบบใหม่');
    if(typeof result?.user?.id!=='string'||!result.user.id||!result.access_token)throw Error('ข้อมูลเข้าสู่ระบบไม่ครบถ้วน');
-   switchStore('shiftplanner-codes-account:'+config.url+':'+result.user.id);
+   const previousSession=session;
    session={...result,username,user:{...result.user,email:result.user.email||email}};
+   try{switchStore('shiftplanner-codes-account:'+config.url+':'+result.user.id)}catch(e){session=previousSession;throw e}
    // Load a clean account immediately; resume pending uploads after login using the saved revision.
    if(loadError){message='เข้าสู่ระบบแล้ว · '+loadError;return}
    if(doc.dirty){message='เข้าสู่ระบบแล้ว กำลังเตรียมส่งข้อมูลที่ยังไม่ได้ส่งจากเครื่องนี้อัตโนมัติ';return}
@@ -372,8 +396,8 @@ const CodeLibrary=(()=>{
    }
    try{await request('/auth/v1/logout?scope=local',{method:'POST'})}catch(e){warning+=' · ยืนยันการออกจากระบบกับเซิร์ฟเวอร์ไม่ได้ กรุณาเข้าสู่ระบบใหม่เมื่อเชื่อมต่อได้'}
    finally{
-    session=null;loginUsername='teen';
     try{switchStore(LOCAL)}catch(e){warning+=' · '+e.message}
+    lockAccount();loginUsername='teen';
    }
    message='ออกจากระบบบนเครื่องนี้แล้ว'+warning;toast(message);
   });
@@ -397,6 +421,7 @@ const CodeLibrary=(()=>{
  });
  window.addEventListener('beforeunload',e=>{if(storageWarning||busy||autoSyncTask||(session&&doc.dirty)){e.preventDefault();e.returnValue=''}});
  window.addEventListener('online',()=>scheduleAutoSync(0));
+ window.addEventListener('pagehide',()=>lockAccount());
  window.addEventListener('focus',()=>{if(doc.dirty)scheduleAutoSync(0)});
  window.addEventListener('storage',e=>{
   if(e.key!==store)return;
@@ -405,6 +430,14 @@ const CodeLibrary=(()=>{
   if(currentView==='codes')render();
  });
  if(currentView==='codes')render();else renderAccount();
- return {render,edit,save,remove,confirmRemove,files,backup,excel,importFile,cloud,togglePassword,login,push,pullPrompt,pull,copyLocal,logout,local,recover,confirmRecover,motion,nextSpeech,suspend,detail,favorite,goToPage,removeAll,confirmRemoveAll,cancelRemoveAll,lookup,openSearch,
+ const api={render,edit,save,remove,confirmRemove,files,backup,excel,importFile,cloud,togglePassword,login,push,pullPrompt,pull,copyLocal,logout,local,recover,confirmRecover,motion,nextSpeech,suspend,detail,favorite,goToPage,removeAll,confirmRemoveAll,cancelRemoveAll,lookup,openSearch,
   favorites(){favoritesOnly=!favoritesOnly;page=1;renderFavorites();renderResults()},search(v){query=v;page=1;renderResults()},kind(v,checked){if(!['conditions','procedures','note'].includes(v))return;kind=kind.filter(k=>k!==v);if(checked)kind.push(v);page=1;renderResults()},category(v){if(v==='')category=[];else if(/^[A-Z]$/.test(v))category=category.includes(v)?category.filter(c=>c!==v):[...category,v].sort();else return;page=1;render()},page(delta){goToPage(page+delta)},clearSearch(){category=[];query='';kind=[];favoritesOnly=false;page=1;render()}};
+ // Guard entry points as well as writes, including export, chat search and stale dialog buttons.
+ for(const name of ['edit','save','remove','confirmRemove','files','backup','excel','importFile','push','pullPrompt','pull','copyLocal','recover','confirmRecover','detail','favorite','goToPage','removeAll','confirmRemoveAll','lookup','openSearch','favorites','search','kind','category','page','clearSearch']){
+  const action=api[name];api[name]=(...args)=>{
+   if(accountLocked()){const error=Error('กรุณาเข้าสู่ระบบก่อนเปิดหรือแก้ไขคลังบัญชี');if(name==='lookup')throw error;toast(error.message);return false}
+   return action(...args);
+  };
+ }
+ return api;
 })();

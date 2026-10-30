@@ -10,6 +10,10 @@ const CHAT_ACTIONS=[
 ];
 let helpMessages=[],outreachChat={step:'idle',operation:'add',action:'outreach',month:'',pid:'',daysText:''};
 let helpMode='schedule',helpDiseaseMessages=[];
+function clearDiseaseChat(){
+ helpDiseaseMessages=[];
+ if(outreachChatOpen()&&helpMode==='diseases')renderHelpChat();
+}
 function currentChatAction(){return CHAT_ACTIONS.find(a=>a.id===outreachChat.action)||CHAT_ACTIONS[0]}
 function removingChatDays(){return outreachChat.operation==='remove'}
 function chatActionLabel(action){return removingChatDays()?'ยกเลิก '+action.topic:action.label}
