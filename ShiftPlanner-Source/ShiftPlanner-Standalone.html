@@ -2111,6 +2111,7 @@ const CodeLibrary=(()=>{
  // Public project configuration only. Passwords and session tokens are never bundled.
  const defaultConfig=CodeCatalog.config('https://omtcyjoewqtfsreshgfu.supabase.co','sb_publishable_3Ixd4qU4vGBYVRJUqTurSg_vFabVA5B');
  const config=defaultConfig;
+ const TAB_SESSION='shiftplanner-codes-tab-session-v1';
  let store=LOCAL,doc=empty(),session=null,loadError='',rawBackup='',storageWarning='',stale=false,busy=false,message='',category=[],query='',kind=[],page=1;
  const backedUpRecords=new Map();let pendingClear=null;
  let loginUsername='teen';
@@ -2150,10 +2151,28 @@ const CodeLibrary=(()=>{
   scheduleSpeech();
  }
  try{const active=localStorage.getItem(ACTIVE);if(active&&/^shiftplanner-codes-account:/.test(active))store=active}catch{}
+ const rememberedTabSession=readTabSession();
+ if(rememberedTabSession)store='shiftplanner-codes-account:'+config.url+':'+rememberedTabSession.userId;
+ function forgetTabSession(){try{sessionStorage.removeItem(TAB_SESSION)}catch{}}
+ function rememberTabSession(){
+  if(!session?.refresh_token)return;
+  try{sessionStorage.setItem(TAB_SESSION,JSON.stringify({project:config.url,userId:session.user.id,username:session.username,refreshToken:session.refresh_token}))}catch{}
+ }
+ function readTabSession(){
+  try{
+   // Only an actual reload can resume the tab. New tabs/history restores must authenticate again.
+   if(typeof performance==='undefined'||performance.getEntriesByType?.('navigation')?.[0]?.type!=='reload'){forgetTabSession();return null}
+   const saved=JSON.parse(sessionStorage.getItem(TAB_SESSION)||'null');
+   if(!saved)return null;
+   if(saved.project!==config.url||typeof saved.userId!=='string'||!saved.userId||typeof saved.refreshToken!=='string'||!saved.refreshToken||saved.refreshToken.length>20000)throw Error('Invalid tab session');
+   CodeCatalog.loginIdentity(saved.username,config.url);return saved;
+  }catch{forgetTabSession();return null}
+ }
  function accountLocked(){return store!==LOCAL&&(!session||store!=='shiftplanner-codes-account:'+config.url+':'+session.user.id)}
  function requireAccountAccess(){if(accountLocked())throw Error('กรุณาเข้าสู่ระบบก่อนเปิดหรือแก้ไขคลังบัญชี')}
  function clearAccountChat(){if(typeof clearDiseaseChat==='function')clearDiseaseChat()}
- function lockAccount(){
+ function lockAccount(preserveTabSession=false){
+  if(!preserveTabSession)forgetTabSession();
   authEpoch++;session=null;cancelAutoSync();pendingClear=null;clearAccountChat();
   if($('modal').open)closeModal();
   $('modalBody').innerHTML='';$('modalFoot').innerHTML='';
@@ -2259,7 +2278,7 @@ const CodeLibrary=(()=>{
   const host=$('codesView');if(!host)return;
   if(accountLocked()){
    suspend();
-   host.innerHTML='<div class="panel code-account-locked"><span class="code-lock-icon" aria-hidden="true">'+icon('user')+'</span><h2>เข้าสู่ระบบเพื่อเปิดคลังของคุณ</h2><p>ข้อมูลบัญชีจะเปิดให้ใช้งานหลังเข้าสู่ระบบเท่านั้น</p><button class="primary" onclick="CodeLibrary.cloud()">เข้าสู่ระบบ</button></div>';
+   host.innerHTML='<div class="panel code-account-locked"><span class="code-lock-icon" aria-hidden="true">'+icon('user')+'</span><h2>'+(busy?'กำลังเปิดบัญชีของคุณ…':'เข้าสู่ระบบเพื่อเปิดคลังของคุณ')+'</h2><p>'+(busy?'กำลังตรวจสอบการเข้าสู่ระบบ':'ข้อมูลบัญชีจะเปิดให้ใช้งานหลังเข้าสู่ระบบเท่านั้น')+'</p><button class="primary" onclick="CodeLibrary.cloud()" '+(busy?'disabled':'')+'>เข้าสู่ระบบ</button></div>';
    return;
   }
   const counts=Object.fromEntries('ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c=>[c,doc.records.filter(r=>r.code[0]===c).length]));
@@ -2414,7 +2433,7 @@ const CodeLibrary=(()=>{
    try{
     const refreshed=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token},auth:false});
     if(!refreshed?.access_token||refreshed.user?.id!==session.user.id)throw Error('กรุณาเข้าสู่ระบบใหม่');
-    session={...refreshed,username:session.username};return request(path,{method,body,auth,retry:false});
+    session={...refreshed,username:session.username};rememberTabSession();return request(path,{method,body,auth,retry:false});
    }catch(e){lockAccount();throw e}
   }
   if(!response.ok){
@@ -2446,15 +2465,31 @@ const CodeLibrary=(()=>{
    const previousSession=session;
    session={...result,username,user:{...result.user,email:result.user.email||email}};
    try{switchStore('shiftplanner-codes-account:'+config.url+':'+result.user.id)}catch(e){session=previousSession;throw e}
-   // Load a clean account immediately; resume pending uploads after login using the saved revision.
-   if(loadError){message='เข้าสู่ระบบแล้ว · '+loadError;return}
-   if(doc.dirty){message='เข้าสู่ระบบแล้ว กำลังเตรียมส่งข้อมูลที่ยังไม่ได้ส่งจากเครื่องนี้อัตโนมัติ';return}
-   try{
-    const remote=await readRemote();
-    if(remote){persist(remote);page=1;message='';toast('เข้าสู่ระบบแล้ว โหลดคลัง '+doc.records.length+' รหัสเรียบร้อย',true)}
-    else message='';
-   }catch(e){message=session?'เข้าสู่ระบบแล้ว แต่โหลดคลังไม่ได้: '+e.message:'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่'}
+   rememberTabSession();await loadAccountLibrary(true);
   });
+ }
+ async function loadAccountLibrary(showNotice=false){
+  if(loadError){message='เข้าสู่ระบบแล้ว · '+loadError;return}
+  if(doc.dirty){message='เข้าสู่ระบบแล้ว กำลังเตรียมส่งข้อมูลที่ยังไม่ได้ส่งจากเครื่องนี้อัตโนมัติ';return}
+  try{
+   const remote=await readRemote();
+   if(remote){persist(remote);page=1;if(showNotice)toast('เข้าสู่ระบบแล้ว โหลดคลัง '+doc.records.length+' รหัสเรียบร้อย',true)}
+   message='';
+  }catch(e){message=session?'เข้าสู่ระบบแล้ว แต่โหลดคลังไม่ได้: '+e.message:'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่'}
+ }
+ async function restoreTabSession(saved){
+  if(!saved)return;
+  const attemptEpoch=authEpoch;busy=true;render();
+  try{
+   const result=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:saved.refreshToken},auth:false});
+   if(attemptEpoch!==authEpoch)return;
+   if(!result?.access_token||!result.refresh_token||result.user?.id!==saved.userId)throw Error('กรุณาเข้าสู่ระบบใหม่');
+   session={...result,username:saved.username};loginUsername=saved.username;
+   switchStore('shiftplanner-codes-account:'+config.url+':'+result.user.id);
+   rememberTabSession();await loadAccountLibrary();
+  }catch(e){
+   if(attemptEpoch===authEpoch){lockAccount();toast(e.retryable?'ยังตรวจสอบบัญชีไม่ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วเข้าสู่ระบบใหม่':'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่')}
+  }finally{busy=false;render();scheduleAutoSync()}
  }
  async function readRemote(){
   if(!session)throw Error('กรุณาเข้าสู่ระบบใหม่');
@@ -2508,7 +2543,7 @@ const CodeLibrary=(()=>{
   });
   if($('modal').open&&$('modalTitle').textContent==='เข้าสู่ระบบ')closeModal();
  }
- function local(){if(busy)return;if(autoSyncTask){toast('กำลังบันทึกออนไลน์ กรุณารอสักครู่');return}try{switchStore(LOCAL);session=null;render();closeModal()}catch(e){error(e)}}
+ function local(){if(busy)return;if(autoSyncTask){toast('กำลังบันทึกออนไลน์ กรุณารอสักครู่');return}try{switchStore(LOCAL);session=null;forgetTabSession();render();closeModal()}catch(e){error(e)}}
  function recover(){
   if(!loadError||busy||stale){if(stale)toast('กรุณาสำรอง JSON แล้วรีเฟรชหน้าเพื่อโหลดข้อมูลจากอีกแท็บ');return}
   modal('เริ่มคลังรหัสใหม่','<p>ระบบจะดาวน์โหลดข้อมูลเดิมเป็น JSON สำหรับกู้คืน จากนั้นเริ่มคลังว่าง กรุณาเก็บไฟล์ที่ดาวน์โหลดไว้</p>','<button onclick="closeModal()">ยกเลิก</button><button onclick="CodeLibrary.confirmRecover()">ดาวน์โหลดข้อมูลเดิมและเริ่มใหม่</button>');
@@ -2526,7 +2561,8 @@ const CodeLibrary=(()=>{
  });
  window.addEventListener('beforeunload',e=>{if(storageWarning||busy||autoSyncTask||(session&&doc.dirty)){e.preventDefault();e.returnValue=''}});
  window.addEventListener('online',()=>scheduleAutoSync(0));
- window.addEventListener('pagehide',()=>lockAccount());
+ window.addEventListener('pagehide',()=>lockAccount(true));
+ window.addEventListener('pageshow',e=>{if(e.persisted)lockAccount()});
  window.addEventListener('focus',()=>{if(doc.dirty)scheduleAutoSync(0)});
  window.addEventListener('storage',e=>{
   if(e.key!==store)return;
@@ -2544,6 +2580,7 @@ const CodeLibrary=(()=>{
    return action(...args);
   };
  }
+ api.ready=restoreTabSession(rememberedTabSession);
  return api;
 })();
 

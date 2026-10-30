@@ -5,12 +5,13 @@ const APP_URL=bundledProject[1],APP_KEY=bundledProject[2],APP_EMAIL='teen@'+APP_
 const LOCAL='shiftplanner-codes-local-v1';
 const row=(code='A01',extra={})=>({code,disease:'ชื่อโรคทดสอบ',conditions:'',procedures:'',note:'',...extra});
 const serialized=(records,extra={})=>JSON.stringify({version:1,records,revision:0,dirty:true,...extra});
-function boot({storage=new Map(),fetch=async()=>{throw Error('offline')}}={}){
+function boot({storage=new Map(),tabStorage=new Map(),navigationType='navigate',fetch=async()=>{throw Error('offline')}}={}){
  const elements=new Map(),events={},downloads=[],messages=[],timers=new Map();let timerId=0;
  const $=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',textContent:'',value:'',open:false,attributes:{},classList:{toggle(){}},setAttribute(name,value){this.attributes[name]=value},focus(){},reportValidity(){return true}});return elements.get(id)};
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const ctx=vm.createContext({console,TextEncoder,atob,AbortSignal,fetch,$,esc,currentView:'codes',document:{hidden:false},setTimeout(fn,delay){timers.set(++timerId,{fn,delay});return timerId},clearTimeout(id){timers.delete(id)},
   window:{addEventListener(name,fn){events[name]=fn}},localStorage:{getItem:k=>storage.get(k)??null,setItem(k,v){storage.set(k,v)}},
+  sessionStorage:{getItem:k=>tabStorage.get(k)??null,setItem(k,v){tabStorage.set(k,v)},removeItem(k){tabStorage.delete(k)}},performance:{getEntriesByType:()=>[{type:navigationType}]},
   toast:x=>messages.push(x),download:(content,name,type)=>downloads.push({content,name,type}),
   modal(title,body,foot){$('modal').open=true;$('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modalFoot').innerHTML=foot},closeModal(){$('modal').open=false}
  });
@@ -18,7 +19,7 @@ function boot({storage=new Map(),fetch=async()=>{throw Error('offline')}}={}){
  const run=code=>vm.runInContext(code,ctx);
  function form(r){$('codeLetter').value=r.code[0];$('codeNumber').value=r.code.slice(1);$('codeDisease').value=r.disease;for(const k of ['conditions','procedures','note'])$('code-'+k).value=r[k]||''}
  const idFor=(code,occurrence=0)=>JSON.parse(storage.get(storage.get('shiftplanner-codes-active-v1')||LOCAL)).records.filter(r=>r.code===code)[occurrence].id;
- return {run,$,form,storage,ctx,downloads,messages,events,idFor,timers,tickSpeech(){const entry=[...timers].find(([,t])=>t.delay===7000);assert(entry);timers.delete(entry[0]);entry[1].fn()}};
+ return {run,$,form,storage,tabStorage,ctx,downloads,messages,events,idFor,timers,tickSpeech(){const entry=[...timers].find(([,t])=>t.delay===7000);assert(entry);timers.delete(entry[0]);entry[1].fn()}};
 }
 function unzipStored(bytes){
  const data=Buffer.from(bytes),parts={};let p=0;
@@ -426,7 +427,7 @@ async function main(){
  assert.equal(JSON.parse(resumed.storage.get(LOCAL)).records[0].code,'L01');
  assert.equal(JSON.parse(resumed.storage.get(authKey)).dirty,false);
  console.log('PASS: automatic cross-device saves, concurrent edits, reconnect retry, logout flush, conflict protection and resumed pending data');
- // Remembered account caches stay locked after a refresh, with every data entry point guarded.
+ // Remembered account caches stay locked without a valid tab session, with every data entry point guarded.
  const privateCache=serialized([row('T91',{id:'private-entry',disease:'Private teen record',note:'Owner only'})]);
  const lockedStorage=new Map([[authKey,privateCache],[LOCAL,serialized([row('L01')])],['shiftplanner-codes-active-v1',authKey]]);
  let lockedRequests=0,chatClears=0;
@@ -473,7 +474,43 @@ async function main(){
  assert(abandoned.$('codesView').innerHTML.includes('code-account-locked'));
  assert.throws(()=>abandoned.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/);
  assert.equal(abandoned.storage.get(authKey),cachedBeforeLock);
- console.log('PASS: account cache locks on refresh, navigation and expiry; unauthenticated reads/writes/export blocked; owner re-login restores data');
+ console.log('PASS: account cache locks without authentication; unauthenticated reads/writes/export blocked; owner re-login restores data');
+ // Reload resumes only this tab's authenticated session; opening/restoring a tab starts locked.
+ const tabKey='shiftplanner-codes-tab-session-v1';
+ syncCloud={revision:1,records:model.records([row('T91',{note:'reload retained'})])};
+ let renewalCount=0;
+ const tabFetch=async(url,options)=>{if(url.includes('grant_type=refresh_token'))renewalCount++;return syncFetch(url,options)};
+ const signedInTab=boot({fetch:tabFetch});authForm(signedInTab);await signedInTab.run('CodeLibrary.login()');
+ assert(signedInTab.tabStorage.has(tabKey));assert(!JSON.stringify([...signedInTab.tabStorage]).includes('not-a-real-password'));
+ assert(!JSON.stringify([...signedInTab.storage]).includes('refresh_token'));
+ signedInTab.events.pagehide();assert(signedInTab.tabStorage.has(tabKey),'reload must retain the tab credential');
+ const reload=boot({storage:signedInTab.storage,tabStorage:signedInTab.tabStorage,navigationType:'reload',fetch:tabFetch});
+ assert.throws(()=>reload.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/,'cache stays locked until server validates the token');
+ await reload.run('CodeLibrary.ready');
+ assert.equal(renewalCount,1);assert.equal(reload.run('CodeLibrary.lookup("T91")[0].note'),'reload retained');
+ assert(reload.$('accountControls').innerHTML.includes('teen'));assert.equal(reload.$('modal').open,false,'reload does not open the login dialog');
+ const savedTabCredential=reload.tabStorage.get(tabKey);
+ for(const navigationType of ['navigate','back_forward']){
+  let calls=0;
+  const reopened=boot({storage:new Map(reload.storage),tabStorage:new Map([[tabKey,savedTabCredential]]),navigationType,fetch:async()=>{calls++;throw Error('must not silently login')}});
+  await reopened.run('CodeLibrary.ready');assert.equal(calls,0);assert(!reopened.tabStorage.has(tabKey));
+  assert.throws(()=>reopened.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/);
+ }
+ const closedTab=boot({storage:new Map(reload.storage),navigationType:'reload',fetch:tabFetch});
+ await closedTab.run('CodeLibrary.ready');assert.throws(()=>closedTab.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/,'new tab without session storage must stay locked');
+ const savedLibrary=reload.storage.get(authKey);
+ const revoked=boot({storage:new Map(reload.storage),tabStorage:new Map([[tabKey,savedTabCredential]]),navigationType:'reload',fetch:async()=>reply(400,{})});
+ await revoked.run('CodeLibrary.ready');assert(!revoked.tabStorage.has(tabKey));assert.equal(revoked.storage.get(authKey),savedLibrary);
+ assert.throws(()=>revoked.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/);
+ const historyRestore=boot({storage:new Map(reload.storage),tabStorage:new Map([[tabKey,savedTabCredential]]),navigationType:'reload',fetch:tabFetch});
+ await historyRestore.run('CodeLibrary.ready');historyRestore.events.pagehide();historyRestore.events.pageshow({persisted:true});
+ assert(!historyRestore.tabStorage.has(tabKey));assert.throws(()=>historyRestore.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/);
+ const mismatched=boot({storage:new Map(reload.storage),tabStorage:new Map([[tabKey,savedTabCredential]]),navigationType:'reload',fetch:async()=>reply(200,{...loginResult,user:{id:'other-user'}})});
+ await mismatched.run('CodeLibrary.ready');assert(!mismatched.tabStorage.has(tabKey));assert.throws(()=>mismatched.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/);
+ await reload.run('CodeLibrary.logout()');assert(!reload.tabStorage.has(tabKey),'explicit logout clears reload credentials');
+ const afterLogout=boot({storage:reload.storage,tabStorage:reload.tabStorage,navigationType:'reload',fetch:tabFetch});
+ await afterLogout.run('CodeLibrary.ready');assert(afterLogout.$('accountControls').innerHTML.includes('header-login-button'));
+ console.log('PASS: same-tab reload restores verified login; new/restored tabs, expired tokens and explicit logout stay locked');
  const sql=fs.readFileSync(path.join(root,'supabase/code-library.sql'),'utf8');
  assert(sql.includes('enable row level security'));assert(sql.includes('security invoker'));assert(sql.includes("errcode = '40001'"));assert(sql.includes('and revision = expected_revision'));
  console.log('PASS: duplicate-code entries, independent editing/deletion, stable legacy migration, duplicate-safe JSON/Excel/cloud roundtrip, filtering, escaped notes, tab conflicts, recovery, cloud auth and offline preservation');
