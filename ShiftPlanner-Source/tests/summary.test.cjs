@@ -1,0 +1,34 @@
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+const ctx=vm.createContext({console});
+for(const file of ['core','data','summary'])vm.runInContext(fs.readFileSync(path.join(__dirname,'../js/'+file+'.js'),'utf8'),ctx);
+const run=s=>vm.runInContext(s,ctx),json=s=>JSON.parse(run('JSON.stringify('+s+')'));
+run(`var sample=clone(SEED);sample.selected='2026-11';sample.months[sample.selected]=freshMonth(sample.selected);var m=sample.months[sample.selected];m.excludedStaffIds=['2','9'];m.days[3].holiday=true;sample.payRates['1']={card:500.25,dawn:80.35};m.cells={'1|1':{code:'N',locked:true},'1|2':{code:'M'},'1|3':{code:'A'},'1|4':{code:'R'},'1|5':{code:'X'},'1|6':{code:'',block:'OFF'},'1|7':{code:'',block:'VAC'},'3|1':{code:'N'},'3|2':{code:'R',locked:true},'2|1':{code:'N'}};var before=JSON.stringify(sample);var stats=ShiftStats.build(sample,sample.selected)`);
+assert.equal(run('JSON.stringify(sample)'),run('before'),'statistics are read-only');
+assert.equal(run('stats.people.length'),7);assert.equal(run('stats.team.total'),7);
+assert.equal(run('stats.team.hours'),38);assert.equal(run('stats.team.pay'),2041.45);
+assert.equal(run('stats.team.OFF'),1);assert.equal(run('stats.team.VAC'),1);assert.equal(run('stats.team.locked'),2);
+assert.deepEqual(json('stats.team.byCode.N'),{count:2,hours:16,pay:830.25});
+assert.equal(run('stats.team.regular'),4);assert.equal(run('stats.team.holiday'),3);
+assert.equal(run('stats.required'),101);assert.equal(run('stats.covered'),4);assert.equal(run('stats.unfilled'),97);assert.equal(run('stats.extra'),3,'overfilled slots do not count as coverage');
+run(`var one=ShiftStats.scope(stats,'1')`);
+assert.equal(run('one.total'),5);assert.equal(run('one.pay'),1661.45);assert.equal(run('one.freeDays'),23);assert.equal(run('one.longestRun'),5);
+assert.equal(run('one.rates.card'),500.25);assert.equal(run('one.days[5].block'),'OFF');
+assert.equal(run('ShiftStats.scope(stats,"missing").id'),'','a missing or removed person returns to the team');
+run(`sample.people[2].removedFrom='2026-11';var removed=ShiftStats.build(sample,sample.selected)`);assert.equal(run('removed.team.total'),5);
+run(`sample.months['2027-02']=freshMonth('2027-02');var empty=ShiftStats.build(sample,'2027-02')`);
+assert.equal(run('empty.daily.length'),28);assert.equal(run('empty.team.pay'),0);assert.equal(run('empty.coverage'),0);
+run(`sample.months['2027-02'].excludedStaffIds=sample.people.map(p=>p.id);var nobody=ShiftStats.build(sample,'2027-02')`);
+assert.equal(run('nobody.people.length'),0);assert.equal(run('nobody.team.total'),0);assert.equal(run('nobody.team.average'),0);
+console.log('PASS summary: team/person counts, hours, pay cents, leave, holidays, coverage, removed staff, empty roster and read-only behavior');
+const harness=fs.readFileSync(path.join(__dirname,'startup.test.cjs'),'utf8'),boot=new Function('require','__dirname',harness.slice(0,harness.indexOf('for(const standalone'))+';return boot;')(require,__dirname);
+for(const standalone of [false,true]){
+ const b=boot(null,standalone);b.run('Personnel.init();view("summary");ShiftSummary.render()');
+ assert(b.element('summaryDashboard').innerHTML.includes('ยังไม่มีเวรในเดือนนี้'));assert(!b.element('summaryDashboard').innerHTML.includes('NaN'));
+ b.run(`state.people[0].name='<img src=x onerror=alert(1)>';activeMonth().cells={'1|1':{code:'N'},'1|3':{code:'R'}};render()`);
+ const untouched=b.run('JSON.stringify(state)');b.run('ShiftSummary.person("1");ShiftSummary.metric("pay")');
+ assert(b.element('summaryDashboard').innerHTML.includes('&lt;img src=x'));assert(!b.element('summaryDashboard').innerHTML.includes('<img src=x'));
+ assert(b.element('summaryDashboard').innerHTML.includes('เวรรายวันของ'));assert(b.element('summaryDashboard').innerHTML.includes('580'));
+ assert.equal(b.run('JSON.stringify(state)'),untouched,'graph metric and person filters never change account data');
+ b.run('state.people=state.people.slice(1);render()');assert(!b.element('summaryDashboard').innerHTML.includes('sum-person-heading'),'removing a selected person clears their private overview');
+}
+console.log('PASS summary page: source/standalone empty states, personal views, pay graph, HTML escaping, selection reset and unchanged scheduling data');
