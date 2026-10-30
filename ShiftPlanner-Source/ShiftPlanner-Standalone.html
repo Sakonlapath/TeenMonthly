@@ -2017,7 +2017,8 @@ const CodeCatalog = (() => {
     r[name]=v.trim();
    }
    r.code=r.code.toUpperCase().replace(/\s/g,'');
-   if(!/^[A-Z][0-9]+(?:\.[0-9]+)?$/.test(r.code))throw Error('รหัสต้องเป็น A–Z ตามด้วยตัวเลข เช่น A00 หรือ A00.1');
+   // Keep older numeric codes readable; newly entered suffixes are limited in upsert.
+   if(!/^[A-Z][A-Z0-9.]{1,5}$/.test(r.code)&&!/^[A-Z][0-9]+(?:\.[0-9]+)?$/.test(r.code))throw Error('รหัสต้องเป็นหมวด A–Z ตามด้วยตัวอักษรอังกฤษ ตัวเลข หรือจุด ไม่เกิน 5 ตัว');
    if(!r.disease)throw Error('กรุณาระบุชื่อโรค');
    // Older libraries have no IDs. Derive repeatable IDs without changing their data.
    // Include an occurrence number so even identical legacy rows remain separate.
@@ -2051,6 +2052,7 @@ const CodeCatalog = (() => {
   rows=records(rows);
   if(oldId&&!rows.some(x=>x.id===oldId))throw Error('ไม่พบรายการที่กำลังแก้ไข กรุณาเปิดรายการใหม่');
   const r=records([{...rows.find(x=>x.id===oldId),...input,id:oldId||newId()}])[0];
+  if(r.code.length>6&&(!oldId||r.code!==rows.find(x=>x.id===oldId).code))throw Error('รหัสหลังหมวดใส่ได้ไม่เกิน 5 ตัว รวมจุดด้วย');
   return records(oldId?rows.map(x=>x.id===oldId?r:x):[...rows,r]);
  }
  function merge(rows,incoming){
@@ -2358,7 +2360,8 @@ const CodeLibrary=(()=>{
   if(busy||loadError)return;
   const r=doc.records.find(x=>x.id===id)||{code:category.length===1?category[0]:'A',disease:'',conditions:'',procedures:'',note:''};
   if(id&&!r.id){toast('ไม่พบรายการนี้ กรุณาเปิดใหม่');return}
-  modal(id?'แก้ไขรหัส '+r.code:'เพิ่มโค้ดรหัส',`<form id="codeForm" class="code-form" onsubmit="event.preventDefault();CodeLibrary.save('${id}')"><div class="code-form-grid"><label class="field">หมวด<select id="codeLetter">${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c=>'<option '+(c===r.code[0]?'selected':'')+'>'+c+'</option>').join('')}</select></label><label class="field">เลขหลังหมวด<input id="codeNumber" required maxlength="31" inputmode="decimal" pattern="[0-9]+([.][0-9]+)?" value="${esc(r.code.slice(1))}" placeholder="เช่น 00 หรือ 00.1"></label></div><label class="field">ชื่อโรค<input id="codeDisease" required maxlength="500" value="${esc(r.disease)}" placeholder="กรอกชื่อโรค"></label>${[['conditions','เงื่อนไข'],['procedures','หัตถการ'],['note','Note เพิ่มเติม']].map(([k,label])=>'<label class="field">'+label+' <small>(ไม่บังคับ)</small><textarea id="code-'+k+'" maxlength="8000" rows="3">'+esc(r[k])+'</textarea></label>').join('')}<p id="codeFormError" class="code-message" role="alert"></p><p class="help">ใช้รหัสและเลขซ้ำกันได้ แต่ละรายการแก้ไขหรือลบแยกกันได้</p></form>`,'<button onclick="closeModal()">ยกเลิก</button><button class="primary" type="submit" form="codeForm">บันทึกรหัส</button>');
+  const suffixPattern='[A-Za-z0-9.]{1,5}'+(r.code.length>6?'|'+r.code.slice(1).replaceAll('.','[.]'):'');
+  modal(id?'แก้ไขรหัส '+r.code:'เพิ่มโค้ดรหัส',`<form id="codeForm" class="code-form" onsubmit="event.preventDefault();CodeLibrary.save('${id}')"><div class="code-form-grid"><label class="field">หมวด<select id="codeLetter">${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c=>'<option '+(c===r.code[0]?'selected':'')+'>'+c+'</option>').join('')}</select></label><label class="field">รหัสหลังหมวด (ไม่เกิน 5 ตัว)<input id="codeNumber" required maxlength="5" inputmode="text" autocapitalize="characters" spellcheck="false" pattern="${suffixPattern}" value="${esc(r.code.slice(1))}" placeholder="เช่น 12A.3"></label></div><label class="field">ชื่อโรค<input id="codeDisease" required maxlength="500" value="${esc(r.disease)}" placeholder="กรอกชื่อโรค"></label>${[['conditions','เงื่อนไข'],['procedures','หัตถการ'],['note','Note เพิ่มเติม']].map(([k,label])=>'<label class="field">'+label+' <small>(ไม่บังคับ)</small><textarea id="code-'+k+'" maxlength="8000" rows="3">'+esc(r[k])+'</textarea></label>').join('')}<p id="codeFormError" class="code-message" role="alert"></p><p class="help">ใช้รหัสและเลขซ้ำกันได้ แต่ละรายการแก้ไขหรือลบแยกกันได้</p></form>`,'<button onclick="closeModal()">ยกเลิก</button><button class="primary" type="submit" form="codeForm">บันทึกรหัส</button>');
   $('codeNumber').focus();
  }
  function save(id){

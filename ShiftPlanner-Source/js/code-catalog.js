@@ -14,7 +14,8 @@ const CodeCatalog = (() => {
     r[name]=v.trim();
    }
    r.code=r.code.toUpperCase().replace(/\s/g,'');
-   if(!/^[A-Z][0-9]+(?:\.[0-9]+)?$/.test(r.code))throw Error('รหัสต้องเป็น A–Z ตามด้วยตัวเลข เช่น A00 หรือ A00.1');
+   // Keep older numeric codes readable; newly entered suffixes are limited in upsert.
+   if(!/^[A-Z][A-Z0-9.]{1,5}$/.test(r.code)&&!/^[A-Z][0-9]+(?:\.[0-9]+)?$/.test(r.code))throw Error('รหัสต้องเป็นหมวด A–Z ตามด้วยตัวอักษรอังกฤษ ตัวเลข หรือจุด ไม่เกิน 5 ตัว');
    if(!r.disease)throw Error('กรุณาระบุชื่อโรค');
    // Older libraries have no IDs. Derive repeatable IDs without changing their data.
    // Include an occurrence number so even identical legacy rows remain separate.
@@ -48,6 +49,7 @@ const CodeCatalog = (() => {
   rows=records(rows);
   if(oldId&&!rows.some(x=>x.id===oldId))throw Error('ไม่พบรายการที่กำลังแก้ไข กรุณาเปิดรายการใหม่');
   const r=records([{...rows.find(x=>x.id===oldId),...input,id:oldId||newId()}])[0];
+  if(r.code.length>6&&(!oldId||r.code!==rows.find(x=>x.id===oldId).code))throw Error('รหัสหลังหมวดใส่ได้ไม่เกิน 5 ตัว รวมจุดด้วย');
   return records(oldId?rows.map(x=>x.id===oldId?r:x):[...rows,r]);
  }
  function merge(rows,incoming){

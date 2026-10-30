@@ -91,7 +91,22 @@ async function main(){
  const savedConfig=boot({storage:new Map([['shiftplanner-codes-cloud-v1',JSON.stringify({url:'https://saved-project.supabase.co',key:'sb_publishable_saved'})]])});
  savedConfig.run('CodeLibrary.cloud()');assert(!savedConfig.$('modalBody').innerHTML.includes('saved-project'));
  assert.equal(model.records([row('a00.01')])[0].code,'A00.01');
- for(const code of ['A','AA01','001','A1.','A01<script>','Z-10'])assert.throws(()=>model.records([row(code)]));
+ for(const code of ['A','001','A01<script>','Z-10','A12/3','A1234BC'])assert.throws(()=>model.records([row(code)]));
+ for(const suffix of ['A','a1','12A.3','AB.CD','1.2.3','.12','12.']){
+  const added=model.upsert([],row('B'+suffix));assert.equal(added[0].code,'B'+suffix.toUpperCase());
+  assert.equal(model.filter(added,'B',suffix).length,1);
+  assert.equal(model.parseBackup(JSON.parse(JSON.stringify(model.backup(added))))[0].code,added[0].code);
+  assert(unzipStored(model.xlsx(added))['xl/worksheets/sheet1.xml'].includes('>'+added[0].code+'<'));
+ }
+ for(const code of ['A123456','A123456.7','A12345B','A123.45'])assert.throws(()=>model.upsert([],row(code)));
+ const oldLong=model.records([row('A1234567')]);assert.equal(model.parseBackup(model.backup(oldLong))[0].code,'A1234567');
+ assert.equal(model.upsert(oldLong,{...oldLong[0],favorite:true},oldLong[0].id)[0].favorite,true);
+ const suffixForm=boot();suffixForm.run('CodeLibrary.edit()');
+ assert(suffixForm.$('modalBody').innerHTML.includes('maxlength="5" inputmode="text"'));
+ assert(suffixForm.$('modalBody').innerHTML.includes('pattern="[A-Za-z0-9.]{1,5}"'));
+ suffixForm.form(row('A12b.3'));suffixForm.run('CodeLibrary.save()');assert.equal(suffixForm.idFor('A12B.3').length>0,true);
+ const savedSuffix=suffixForm.storage.get(LOCAL);suffixForm.form(row('A123456'));suffixForm.run('CodeLibrary.save()');
+ assert.equal(suffixForm.storage.get(LOCAL),savedSuffix);assert(suffixForm.$('codeFormError').textContent.includes('ไม่เกิน 5'));
  const legacyDuplicates=model.records([row('A01'),row('a01')]);
  assert.equal(legacyDuplicates.length,2);assert.notEqual(legacyDuplicates[0].id,legacyDuplicates[1].id);
  assert.equal(JSON.stringify(model.records(legacyDuplicates)),JSON.stringify(legacyDuplicates),'legacy migration is stable');
