@@ -27,7 +27,7 @@ const ShiftStats=(()=>{
 })();
 
 const ShiftSummary=(()=>{
- let selected='',metric='count',issueCount=null;
+ let selected='',metric='count',issueCount=null,tip=null,tipAnchor=null;
  const types={N:{label:'ดึก',color:'#a694ca'},M:{label:'เช้า',color:'#76b697'},A:{label:'บ่าย',color:'#e3ad60'},R:{label:'หน้าตู้KIOS',color:'#66acbe'},X:{label:'ออกรพ.สต.',color:'#df887b'}};
  const metrics={count:{label:'จำนวนเวร',unit:'เวร'},hours:{label:'ชั่วโมง',unit:'ชม.'},pay:{label:'ค่าเวร',unit:'บาท'}};
  const number=n=>n.toLocaleString('th-TH',{maximumFractionDigits:2}),arg=v=>esc(JSON.stringify(v));
@@ -51,20 +51,55 @@ const ShiftSummary=(()=>{
  }
  function render(report){
   if(Array.isArray(report?.issues))issueCount=report.issues.length;
-  const host=$('summaryDashboard');if(!host)return;
-  const barScroll=host.querySelector('.sum-bar-list')?.scrollTop||0;
+  const host=$('summaryDashboard'),charts=$('summaryCharts');if(!host||!charts)return;
+  hideTip();const barScroll=charts.querySelector('.sum-bar-list')?.scrollTop||0;
   const model=ShiftStats.build(state,state.selected);if(!model.people.some(p=>p.id===selected))selected='';const row=ShiftStats.scope(model,selected),card=row.byCode.N.count+row.byCode.M.count+row.byCode.A.count,dawn=row.byCode.R.count+row.byCode.X.count;
   host.innerHTML='<div class="sum-notebook"><header class="sum-heading"><div class="sum-heading-title"><span class="sum-bow">'+icon('bow',32)+'</span><div><h1>สรุปเดือนของทีม</h1><p>'+model.people.length+' คนในตาราง · '+model.daysIn+' วัน</p></div></div><div class="sum-month-nav"><button type="button" onclick="changeMonth(-1)" aria-label="สรุปเดือนก่อนหน้า">‹</button><label><span class="sum-sr-only">เดือนที่ต้องการสรุป</span><input id="summaryMonthPicker" type="month" value="'+state.selected+'" onchange="selectMonth(this.value)"></label><button type="button" onclick="changeMonth(1)" aria-label="สรุปเดือนถัดไป">›</button></div></header><div class="sum-toolbar"><div class="sum-scope"><button type="button" class="sum-team-button'+(!selected?' active':'')+'" aria-pressed="'+(!selected)+'" onclick="ShiftSummary.person(\'\')">ทั้งทีม</button><label><span class="sum-sr-only">เลือกดูสถิติรายคน</span><select id="summaryPersonSelect" onchange="ShiftSummary.person(this.value)"><option value="">เลือกดูรายคน</option>'+model.people.map(p=>'<option value="'+esc(p.id)+'" '+(p.id===selected?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></label></div><div class="sum-toolbar-actions"><span class="sum-month-label">'+esc(monthLabel(state.selected))+'</span><button type="button" class="sum-audit-button'+(issueCount===0?' clear':'')+'" onclick="issuesModal()">ตรวจตาราง'+(issueCount===null?'':' · '+issueCount+' รายการ')+'</button></div></div>'+
    (selected?'<div class="sum-person-heading">'+avatar(row)+'<div><h2>'+esc(row.name)+'</h2><p>'+esc(row.role)+'</p></div><div class="sum-person-rates"><span>ห้องบัตร <b>'+number(row.rates.card)+'</b> บาท / เวร</span><span>รุ่งอรุณ <b>'+number(row.rates.dawn)+'</b> บาท / เวร</span></div></div>':'')+
-   '<div class="sum-metrics">'+metricCard('calendar','ลงเวรแล้ว',number(row.total),'เวร','ห้องบัตร '+card+' · รุ่งอรุณ '+dawn)+metricCard('coin','ค่าเวรรวม',number(row.pay),'บาท',selected?'ตามเรทของคนนี้':'รวมค่าตอบแทน '+model.people.length+' คน')+metricCard('clock','ชั่วโมงทำงาน',number(row.hours),'ชม.','วันธรรมดา '+row.regular+' · วันหยุด '+row.holiday+' เวร')+metricCard('rest','OFF / Vac',row.OFF+' <span class="sum-metric-divider">/</span> '+row.VAC,'วัน',selected?'วันว่างไม่รวม OFF/Vac '+row.freeDays+' วัน':'รวมวันหยุดและวันลาของทุกคน')+'</div>'+
+   '<div class="sum-metrics">'+metricCard('calendar','ลงเวรแล้ว',number(row.total),'เวร','ห้องบัตร '+card+' · รุ่งอรุณ '+dawn)+metricCard('coin','ค่าเวรรวม',number(row.pay),'บาท',selected?'ตามเรทของคนนี้':'รวมค่าตอบแทน '+model.people.length+' คน')+metricCard('clock','ชั่วโมงทำงาน',number(row.hours),'ชม.','วันธรรมดา '+row.regular+' · วันหยุด '+row.holiday+' เวร')+metricCard('rest','OFF / Vac',row.OFF+' <span class="sum-metric-divider">/</span> '+row.VAC,'วัน',selected?'วันว่างไม่รวม OFF/Vac '+row.freeDays+' วัน':'รวมวันหยุดและวันลาของทุกคน')+'</div></div>';
+  charts.innerHTML='<div class="sum-notebook">'+
    (!selected?'<section class="sum-coverage" aria-label="ความคืบหน้าตาราง"><div><b>เติมตารางแล้ว '+model.covered+' / '+model.required+' ช่อง</b><span>ยังขาด '+model.unfilled+' ช่อง'+(model.extra?' · ลงเกินจำนวนที่ต้องการ '+model.extra+' เวร':'')+'</span></div><div class="sum-coverage-track" role="progressbar" aria-label="ช่องเวรที่ลงครบตามจำนวนที่ต้องการ" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.round(model.coverage)+'"><i style="width:'+model.coverage+'%"></i></div><strong>'+number(model.coverage)+'%</strong></section>':'')+
    (!selected?'<div class="sum-team-facts"><span>เฉลี่ย <b>'+number(model.team.average)+'</b> เวร / คน</span><span>ลงเวรแล้ว <b>'+model.people.filter(p=>p.total>0).length+' / '+model.people.length+'</b> คน</span><span>ค่าเวรเฉลี่ย <b>'+number(model.people.length?model.team.pay/model.people.length:0)+'</b> บาท / คน</span><span>ล็อกไว้ <b>'+model.team.locked+'</b> เวร</span></div>':'')+
    '<div class="sum-chart-grid">'+bars(model)+ring(row)+'</div>'+daily(model,row)+
    '<section class="sum-type-breakdown"><div class="sum-chart-heading"><h2>สรุปแยกตามประเภทเวร</h2><span>'+esc(selected?row.plainName:'ทั้งทีม')+'</span></div><div class="sum-type-grid">'+CODES.map(c=>'<article style="--sum-type:'+types[c].color+'"><h3><i></i>'+types[c].label+'</h3><b>'+row.byCode[c].count+' <small>เวร</small></b><span>'+number(row.byCode[c].hours)+' ชั่วโมง</span><strong>'+number(row.byCode[c].pay)+' <small>บาท</small></strong></article>').join('')+'</div></section></div>';
-  const list=host.querySelector('.sum-bar-list');if(list)list.scrollTop=barScroll;
+  const list=charts.querySelector('.sum-bar-list');if(list)list.scrollTop=barScroll;
+  decorateTips();
+ }
+ function decorateTips(){
+  const section=$('summaryView');if(!section)return;
+  section.querySelectorAll('[title]').forEach(el=>{const text=el.getAttribute('title');if(text)el.setAttribute('data-summary-tip',text);el.removeAttribute('title')});
+  section.querySelectorAll('svg title').forEach(el=>{el.parentElement.setAttribute('data-summary-tip',el.textContent);el.remove()});
+ }
+ function hideTip(){
+  if(tipAnchor){const ids=(tipAnchor.getAttribute('aria-describedby')||'').split(/\s+/).filter(id=>id&&id!=='summaryTooltip');if(ids.length)tipAnchor.setAttribute('aria-describedby',ids.join(' '));else tipAnchor.removeAttribute('aria-describedby');tipAnchor=null}
+  if(tip){tip.hidden=true;tip.textContent=''}
+ }
+ function placeTip(x,y){
+  if(!tip||tip.hidden)return;const box=tip.getBoundingClientRect();
+  tip.style.left=Math.max(10,Math.min(x+14,window.innerWidth-box.width-10))+'px';
+  tip.style.top=Math.max(10,y+16+box.height>window.innerHeight-10?y-box.height-12:y+16)+'px';
+ }
+ function showTip(anchor,x,y){
+  const text=anchor?.getAttribute('data-summary-tip');if(!text){hideTip();return}
+  hideTip();
+  if(!tip){tip=document.createElement('div');tip.id='summaryTooltip';tip.className='sum-tooltip';tip.setAttribute('role','tooltip');document.body.appendChild(tip)}
+  tip.textContent=text;tip.hidden=false;tipAnchor=anchor;
+  const ids=(anchor.getAttribute('aria-describedby')||'').split(/\s+/).filter(Boolean);anchor.setAttribute('aria-describedby',[...new Set([...ids,'summaryTooltip'])].join(' '));placeTip(x,y);
+ }
+ function setupTips(){
+  const target=e=>{const el=e.target?.closest?.('[data-summary-tip]');return el&&$('summaryView').contains(el)?el:null};
+  document.addEventListener('pointerover',e=>{if(e.pointerType==='touch')return;const anchor=target(e);if(anchor&&anchor!==tipAnchor)showTip(anchor,e.clientX,e.clientY)});
+  document.addEventListener('pointermove',e=>{if(e.pointerType==='touch')return;const anchor=target(e);if(anchor){if(anchor!==tipAnchor)showTip(anchor,e.clientX,e.clientY);else placeTip(e.clientX,e.clientY)}});
+  document.addEventListener('pointerout',e=>{if(tipAnchor&&tipAnchor.contains(e.target)&&!tipAnchor.contains(e.relatedTarget)&&!tipAnchor.contains(document.activeElement))hideTip()});
+  document.addEventListener('focusin',e=>{const anchor=target(e);if(anchor){const box=anchor.getBoundingClientRect();showTip(anchor,box.left,box.bottom)}});
+  document.addEventListener('focusout',e=>{if(tipAnchor?.contains(e.target))hideTip()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')hideTip()});
+  document.addEventListener('click',hideTip);
+  document.addEventListener('scroll',()=>{if(tipAnchor?.contains(document.activeElement)){const box=tipAnchor.getBoundingClientRect();if(box.bottom<0||box.top>window.innerHeight)hideTip();else placeTip(box.left,box.bottom)}else hideTip()},true);
+  window.addEventListener('resize',hideTip);
  }
  function person(id){selected=String(id);render();$('summaryPersonSelect')?.focus?.({preventScroll:true})}
  function setMetric(value){if(!metrics[value])return;metric=value;render();$('sumMetric-'+metric)?.focus?.({preventScroll:true})}
- if(typeof document!=='undefined')document.addEventListener('DOMContentLoaded',render);
+ if(typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{render();setupTips()});
  return {render,person,metric:setMetric};
 })();

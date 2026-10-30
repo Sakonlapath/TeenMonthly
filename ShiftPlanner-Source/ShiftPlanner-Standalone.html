@@ -880,6 +880,9 @@ dialog:has(.account-panel) button:focus-visible{outline:2px solid #af4776;outlin
 /* The monthly report is another page in the same rose notebook. */
 body:has(#summaryView:not(.hidden)) .site-header .totals-strip{display:none}
 .sum-notebook{--sum-ink:#633b50;--sum-muted:#8a6477;--sum-line:#edd8e3;color:var(--sum-ink);margin-bottom:18px}
+#summaryDashboard .sum-notebook{margin-bottom:0}#summaryTeamTable{margin:0 0 18px}
+.sum-tooltip{position:fixed;z-index:80;max-width:min(300px,calc(100vw - 20px));padding:10px 14px;border:1px solid #e7b8d0;border-radius:13px;background:#fff7fc;color:#79465f;font:13px/1.6 "Noto Sans Thai","Leelawadee UI",Tahoma,sans-serif;box-shadow:0 6px 24px #9e4a7524;pointer-events:none;white-space:pre-line;overflow-wrap:anywhere}
+.sum-tooltip[hidden],body:has(#summaryView.hidden) .sum-tooltip{display:none}
 .sum-notebook h1,.sum-notebook h2,.sum-notebook h3,.sum-notebook p{margin:0}
 .sum-notebook button,.sum-notebook select,.sum-notebook input{font-family:inherit}
 .sum-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -965,7 +968,7 @@ body:has(#summaryView:not(.hidden)) .site-header .totals-strip{display:none}
 @media(max-width:1150px){.sum-chart-grid{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}.sum-chart{padding:18px}.sum-bars-panel .sum-chart-heading{align-items:flex-start;flex-direction:column;gap:10px}.sum-ring-layout{gap:0}.sum-ring{width:43%}.sum-ring-legend{gap:14px}.sum-bar-row{grid-template-columns:minmax(100px,1fr) minmax(60px,1fr) 65px;gap:8px}.sum-metric{padding:16px}.sum-metric-number{font-size:28px}}
 @media(max-width:850px){.sum-chart-grid{grid-template-columns:1fr}.sum-ring-layout{min-height:0;justify-content:center;gap:30px}.sum-ring{width:210px;max-width:45%}.sum-ring-legend{max-width:300px}.sum-bars-panel .sum-chart-heading{flex-direction:row;align-items:center}.sum-day-grid{grid-template-columns:repeat(7,minmax(0,1fr))}.sum-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.sum-metric p{font-size:12px}.sum-heading{padding:20px}.sum-heading h1{font-size:26px}.sum-bow{width:50px;height:50px}.sum-type-grid{gap:8px}.sum-type-grid article{padding-left:9px}}
 @media(max-width:600px){.sum-heading{flex-direction:column;align-items:stretch;gap:16px;padding:20px 18px;border-radius:18px 18px 0 0}.sum-heading h1{font-size:25px}.sum-month-nav{justify-content:space-between}.sum-month-nav label{flex:1}.sum-month-nav input{width:100%;max-width:none}.sum-month-nav button{width:40px}.sum-toolbar{padding:12px;gap:10px;flex-wrap:wrap}.sum-scope{width:100%}.sum-scope label{flex:1}.sum-scope select{max-width:none}.sum-month-label{display:none}.sum-metrics{gap:9px}.sum-metric{padding:14px 13px;border-radius:13px}.sum-metric-number{font-size:26px}.sum-metric-number small{font-size:10px}.sum-metric-label{font-size:12px;gap:5px}.sum-metric p{font-size:10px;line-height:1.6}.sum-coverage{flex-wrap:wrap;padding:13px;gap:9px}.sum-coverage>div:first-child{width:100%;min-width:0}.sum-coverage-track{min-width:40%;height:7px}.sum-coverage>strong{font-size:13px}.sum-chart{padding:17px 13px;border-radius:15px}.sum-chart-heading h2{font-size:15px}.sum-bars-panel .sum-chart-heading{flex-direction:column;align-items:flex-start}.sum-bar-row{grid-template-columns:minmax(95px,1.1fr) minmax(45px,1fr) 68px;gap:7px;padding:9px 3px}.sum-bar-name{font-size:11px}.sum-bar-name small{font-size:9px}.sum-bar-value{font-size:12px}.sum-bar-track{height:13px}.sum-color-key{font-size:9px;gap:6px 9px}.sum-ring-layout{gap:8px}.sum-ring{width:45%;max-width:190px}.sum-ring-legend{gap:14px}.sum-ring-legend li{font-size:10px;grid-template-columns:minmax(65px,1fr) auto}.sum-ring-legend li>b{font-size:12px}.sum-ring-legend em{font-size:9px}.sum-person-heading{flex-wrap:wrap;padding:13px;gap:10px}.sum-person-heading h2{font-size:16px}.sum-person-rates{margin-left:0;width:100%;flex-direction:row;flex-wrap:wrap;gap:5px 14px;text-align:left;font-size:10px}.sum-day-grid{gap:5px}.sum-day-cell{padding:6px 1px}.sum-day-cell>b{font-size:8px}.sum-person-facts{font-size:10px;gap:7px 13px}.sum-type-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.sum-type-breakdown{padding:17px 14px}.sum-type-grid b{font-size:22px}.sum-type-grid article:last-child{grid-column:1/-1}.sum-type-grid strong{margin-top:5px}.sum-daily-panel .sum-mini-tag{font-size:9px}.sum-daily-caption{font-size:9px}.sum-table-details>summary{padding:14px;font-size:12px}.sum-table-details>summary>span{display:block;margin:4px 0 0 14px}}
-@media print{.sum-notebook{break-inside:auto}.sum-heading{padding:10px;background:#fff}.sum-toolbar,.sum-month-nav,.sum-metric-switch,.sum-link{display:none}.sum-metrics{grid-template-columns:repeat(4,1fr)}.sum-chart-grid{grid-template-columns:1.2fr 1fr}.sum-chart,.sum-metric,.sum-type-breakdown{break-inside:avoid}.sum-bar-list{max-height:none;overflow:visible}.sum-daily-scroll{overflow:visible}.sum-daily-bars{min-width:0}.sum-heading h1{font-size:22px}.sum-type-grid{grid-template-columns:repeat(5,1fr)}}
+@media print{.sum-tooltip{display:none!important}.sum-notebook{break-inside:auto}.sum-heading{padding:10px;background:#fff}.sum-toolbar,.sum-month-nav,.sum-metric-switch,.sum-link{display:none}.sum-metrics{grid-template-columns:repeat(4,1fr)}.sum-chart-grid{grid-template-columns:1.2fr 1fr}.sum-chart,.sum-metric,.sum-type-breakdown{break-inside:avoid}.sum-bar-list{max-height:none;overflow:visible}.sum-daily-scroll{overflow:visible}.sum-daily-bars{min-width:0}.sum-heading h1{font-size:22px}.sum-type-grid{grid-template-columns:repeat(5,1fr)}}
 
 </style></head><body>
 <a class="skip-content" href="#mainContent">ข้ามไปเนื้อหา</a>
@@ -975,7 +978,7 @@ body:has(#summaryView:not(.hidden)) .site-header .totals-strip{display:none}
 <div class="paint-bar"><div class="paint-heading"><div><span class="step-tag">ลงเวรเอง</span><b>เลือกเวร แล้วลากได้เลย</b><span class="paint-intro">ทีละคน หลายวัน ในครั้งเดียว</span></div><button class="textbtn" onclick="shortcutsModal()">ดูคีย์ลัด</button></div><div class="paint-palette"><div id="paintTools" class="paint-tools" role="group" aria-label="เลือกชนิดเวรสำหรับคลิกลาก"></div><button id="inspectTool" class="inspect-tool" aria-pressed="true">ดู / แก้รายช่อง</button></div><div class="paint-feedback"><span id="paintStatus" role="status" aria-live="polite"></span><span><kbd>Ctrl Z</kbd> ย้อนกลับ <kbd>Esc</kbd> ยกเลิก</span></div></div>
 <div class="table-wrap"><table class="schedule" id="scheduleTable"></table></div><div class="under-table"><span id="saveStatus" role="status">บันทึกในเครื่องแล้ว</span><span>เลือกเวรแล้วลากตามวัน · กด E เพื่อแก้รายช่อง / ปลดล็อก · คลิกหัววันที่เพื่อตั้งจำนวนคน</span><span>◆ เวรที่ล็อกไว้ &nbsp; · &nbsp; กรอบแดง = ต้องตรวจสอบ</span></div></div>
 <div class="bottom"><div class="panel info"><h3>เงื่อนไขของตารางนี้</h3><p>จ.–ศ. : ร สีฟ้า หน้าตู้KIOS 06:30–08:30 วันละ 1 คน</p><p>เสาร์–อาทิตย์ / วันหยุด : ดึก 1 · เช้า 2 · บ่าย 1 คน</p><p>ค่าเริ่มต้นวันธรรมดา : ดึก 1 · บ่าย 1 คน</p><p>ร สีแดง : กระจายคนละ 1 เมื่อพอ ถ้าไม่พอให้ตัวหลักก่อน</p></div><div class="panel info"><h3>ก่อนกดจัดอัตโนมัติ</h3><p>1. กำหนด OFF / VAC และตรวจวันหยุดประจำเดือน</p><p>2. เวรที่ลงเองจะล็อกเฉพาะช่องนั้น ระบบจัดช่องว่างวันอื่นต่อได้ กรอกยอดห้องบัตร / รุ่งอรุณเมื่อต้องการกำหนดเป้า</p><p>3. จัดอัตโนมัติ แล้วตรวจสรุปให้ครบก่อนนำไปใช้</p><p>นับเวรรวม ด / ช / บ / ร ทั้งสองสี เป็นครั้งละ 1 เวร</p></div></div></section>
-<section id="summaryView" class="hidden"><div id="summaryDashboard"></div><details class="sum-table-details"><summary>ตารางทั้งทีมและเป้ารายคน <span id="summaryMonth"></span></summary><div class="panel"><div class="table-wrap"><table class="summary-table" id="summaryTable"></table></div></div></details><details class="sum-table-details"><summary>เงื่อนไขการกระจายเวร</summary><div class="panel info"><h3>การกระจายเวร</h3><p id="fairnessDetail"></p><p>ทุกคนใช้เป้ารายบุคคล · ห้องบัตรกระจายตามวันว่างเมื่อมี OFF / Vac · รุ่งอรุณจัดตามปกติ · ไม่มีข้อบังคับลำดับ 2–4 เท่ากัน</p></div></details></section>
+<section id="summaryView" class="hidden"><div id="summaryDashboard"></div><details id="summaryTeamTable" class="sum-table-details" open><summary>ตารางทั้งทีมและเป้ารายคน <span id="summaryMonth"></span></summary><div class="panel"><div class="table-wrap"><table class="summary-table" id="summaryTable"></table></div></div></details><div id="summaryCharts"></div><details class="sum-table-details"><summary>เงื่อนไขการกระจายเวร</summary><div class="panel info"><h3>การกระจายเวร</h3><p id="fairnessDetail"></p><p>ทุกคนใช้เป้ารายบุคคล · ห้องบัตรกระจายตามวันว่างเมื่อมี OFF / Vac · รุ่งอรุณจัดตามปกติ · ไม่มีข้อบังคับลำดับ 2–4 เท่ากัน</p></div></details></section>
 <section id="codesView" aria-label="คลังโค้ดรหัส"></section>
 </main></div>
 <dialog id="modal"><div class="modal-head"><h2 id="modalTitle"></h2><button onclick="closeModal()" aria-label="ปิดหน้าต่าง">×</button></div><div class="modal-body" id="modalBody"></div><div class="modal-foot" id="modalFoot"></div></dialog>
@@ -3270,7 +3273,7 @@ const ShiftStats=(()=>{
 })();
 
 const ShiftSummary=(()=>{
- let selected='',metric='count',issueCount=null;
+ let selected='',metric='count',issueCount=null,tip=null,tipAnchor=null;
  const types={N:{label:'ดึก',color:'#a694ca'},M:{label:'เช้า',color:'#76b697'},A:{label:'บ่าย',color:'#e3ad60'},R:{label:'หน้าตู้KIOS',color:'#66acbe'},X:{label:'ออกรพ.สต.',color:'#df887b'}};
  const metrics={count:{label:'จำนวนเวร',unit:'เวร'},hours:{label:'ชั่วโมง',unit:'ชม.'},pay:{label:'ค่าเวร',unit:'บาท'}};
  const number=n=>n.toLocaleString('th-TH',{maximumFractionDigits:2}),arg=v=>esc(JSON.stringify(v));
@@ -3294,21 +3297,56 @@ const ShiftSummary=(()=>{
  }
  function render(report){
   if(Array.isArray(report?.issues))issueCount=report.issues.length;
-  const host=$('summaryDashboard');if(!host)return;
-  const barScroll=host.querySelector('.sum-bar-list')?.scrollTop||0;
+  const host=$('summaryDashboard'),charts=$('summaryCharts');if(!host||!charts)return;
+  hideTip();const barScroll=charts.querySelector('.sum-bar-list')?.scrollTop||0;
   const model=ShiftStats.build(state,state.selected);if(!model.people.some(p=>p.id===selected))selected='';const row=ShiftStats.scope(model,selected),card=row.byCode.N.count+row.byCode.M.count+row.byCode.A.count,dawn=row.byCode.R.count+row.byCode.X.count;
   host.innerHTML='<div class="sum-notebook"><header class="sum-heading"><div class="sum-heading-title"><span class="sum-bow">'+icon('bow',32)+'</span><div><h1>สรุปเดือนของทีม</h1><p>'+model.people.length+' คนในตาราง · '+model.daysIn+' วัน</p></div></div><div class="sum-month-nav"><button type="button" onclick="changeMonth(-1)" aria-label="สรุปเดือนก่อนหน้า">‹</button><label><span class="sum-sr-only">เดือนที่ต้องการสรุป</span><input id="summaryMonthPicker" type="month" value="'+state.selected+'" onchange="selectMonth(this.value)"></label><button type="button" onclick="changeMonth(1)" aria-label="สรุปเดือนถัดไป">›</button></div></header><div class="sum-toolbar"><div class="sum-scope"><button type="button" class="sum-team-button'+(!selected?' active':'')+'" aria-pressed="'+(!selected)+'" onclick="ShiftSummary.person(\'\')">ทั้งทีม</button><label><span class="sum-sr-only">เลือกดูสถิติรายคน</span><select id="summaryPersonSelect" onchange="ShiftSummary.person(this.value)"><option value="">เลือกดูรายคน</option>'+model.people.map(p=>'<option value="'+esc(p.id)+'" '+(p.id===selected?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></label></div><div class="sum-toolbar-actions"><span class="sum-month-label">'+esc(monthLabel(state.selected))+'</span><button type="button" class="sum-audit-button'+(issueCount===0?' clear':'')+'" onclick="issuesModal()">ตรวจตาราง'+(issueCount===null?'':' · '+issueCount+' รายการ')+'</button></div></div>'+
    (selected?'<div class="sum-person-heading">'+avatar(row)+'<div><h2>'+esc(row.name)+'</h2><p>'+esc(row.role)+'</p></div><div class="sum-person-rates"><span>ห้องบัตร <b>'+number(row.rates.card)+'</b> บาท / เวร</span><span>รุ่งอรุณ <b>'+number(row.rates.dawn)+'</b> บาท / เวร</span></div></div>':'')+
-   '<div class="sum-metrics">'+metricCard('calendar','ลงเวรแล้ว',number(row.total),'เวร','ห้องบัตร '+card+' · รุ่งอรุณ '+dawn)+metricCard('coin','ค่าเวรรวม',number(row.pay),'บาท',selected?'ตามเรทของคนนี้':'รวมค่าตอบแทน '+model.people.length+' คน')+metricCard('clock','ชั่วโมงทำงาน',number(row.hours),'ชม.','วันธรรมดา '+row.regular+' · วันหยุด '+row.holiday+' เวร')+metricCard('rest','OFF / Vac',row.OFF+' <span class="sum-metric-divider">/</span> '+row.VAC,'วัน',selected?'วันว่างไม่รวม OFF/Vac '+row.freeDays+' วัน':'รวมวันหยุดและวันลาของทุกคน')+'</div>'+
+   '<div class="sum-metrics">'+metricCard('calendar','ลงเวรแล้ว',number(row.total),'เวร','ห้องบัตร '+card+' · รุ่งอรุณ '+dawn)+metricCard('coin','ค่าเวรรวม',number(row.pay),'บาท',selected?'ตามเรทของคนนี้':'รวมค่าตอบแทน '+model.people.length+' คน')+metricCard('clock','ชั่วโมงทำงาน',number(row.hours),'ชม.','วันธรรมดา '+row.regular+' · วันหยุด '+row.holiday+' เวร')+metricCard('rest','OFF / Vac',row.OFF+' <span class="sum-metric-divider">/</span> '+row.VAC,'วัน',selected?'วันว่างไม่รวม OFF/Vac '+row.freeDays+' วัน':'รวมวันหยุดและวันลาของทุกคน')+'</div></div>';
+  charts.innerHTML='<div class="sum-notebook">'+
    (!selected?'<section class="sum-coverage" aria-label="ความคืบหน้าตาราง"><div><b>เติมตารางแล้ว '+model.covered+' / '+model.required+' ช่อง</b><span>ยังขาด '+model.unfilled+' ช่อง'+(model.extra?' · ลงเกินจำนวนที่ต้องการ '+model.extra+' เวร':'')+'</span></div><div class="sum-coverage-track" role="progressbar" aria-label="ช่องเวรที่ลงครบตามจำนวนที่ต้องการ" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.round(model.coverage)+'"><i style="width:'+model.coverage+'%"></i></div><strong>'+number(model.coverage)+'%</strong></section>':'')+
    (!selected?'<div class="sum-team-facts"><span>เฉลี่ย <b>'+number(model.team.average)+'</b> เวร / คน</span><span>ลงเวรแล้ว <b>'+model.people.filter(p=>p.total>0).length+' / '+model.people.length+'</b> คน</span><span>ค่าเวรเฉลี่ย <b>'+number(model.people.length?model.team.pay/model.people.length:0)+'</b> บาท / คน</span><span>ล็อกไว้ <b>'+model.team.locked+'</b> เวร</span></div>':'')+
    '<div class="sum-chart-grid">'+bars(model)+ring(row)+'</div>'+daily(model,row)+
    '<section class="sum-type-breakdown"><div class="sum-chart-heading"><h2>สรุปแยกตามประเภทเวร</h2><span>'+esc(selected?row.plainName:'ทั้งทีม')+'</span></div><div class="sum-type-grid">'+CODES.map(c=>'<article style="--sum-type:'+types[c].color+'"><h3><i></i>'+types[c].label+'</h3><b>'+row.byCode[c].count+' <small>เวร</small></b><span>'+number(row.byCode[c].hours)+' ชั่วโมง</span><strong>'+number(row.byCode[c].pay)+' <small>บาท</small></strong></article>').join('')+'</div></section></div>';
-  const list=host.querySelector('.sum-bar-list');if(list)list.scrollTop=barScroll;
+  const list=charts.querySelector('.sum-bar-list');if(list)list.scrollTop=barScroll;
+  decorateTips();
+ }
+ function decorateTips(){
+  const section=$('summaryView');if(!section)return;
+  section.querySelectorAll('[title]').forEach(el=>{const text=el.getAttribute('title');if(text)el.setAttribute('data-summary-tip',text);el.removeAttribute('title')});
+  section.querySelectorAll('svg title').forEach(el=>{el.parentElement.setAttribute('data-summary-tip',el.textContent);el.remove()});
+ }
+ function hideTip(){
+  if(tipAnchor){const ids=(tipAnchor.getAttribute('aria-describedby')||'').split(/\s+/).filter(id=>id&&id!=='summaryTooltip');if(ids.length)tipAnchor.setAttribute('aria-describedby',ids.join(' '));else tipAnchor.removeAttribute('aria-describedby');tipAnchor=null}
+  if(tip){tip.hidden=true;tip.textContent=''}
+ }
+ function placeTip(x,y){
+  if(!tip||tip.hidden)return;const box=tip.getBoundingClientRect();
+  tip.style.left=Math.max(10,Math.min(x+14,window.innerWidth-box.width-10))+'px';
+  tip.style.top=Math.max(10,y+16+box.height>window.innerHeight-10?y-box.height-12:y+16)+'px';
+ }
+ function showTip(anchor,x,y){
+  const text=anchor?.getAttribute('data-summary-tip');if(!text){hideTip();return}
+  hideTip();
+  if(!tip){tip=document.createElement('div');tip.id='summaryTooltip';tip.className='sum-tooltip';tip.setAttribute('role','tooltip');document.body.appendChild(tip)}
+  tip.textContent=text;tip.hidden=false;tipAnchor=anchor;
+  const ids=(anchor.getAttribute('aria-describedby')||'').split(/\s+/).filter(Boolean);anchor.setAttribute('aria-describedby',[...new Set([...ids,'summaryTooltip'])].join(' '));placeTip(x,y);
+ }
+ function setupTips(){
+  const target=e=>{const el=e.target?.closest?.('[data-summary-tip]');return el&&$('summaryView').contains(el)?el:null};
+  document.addEventListener('pointerover',e=>{if(e.pointerType==='touch')return;const anchor=target(e);if(anchor&&anchor!==tipAnchor)showTip(anchor,e.clientX,e.clientY)});
+  document.addEventListener('pointermove',e=>{if(e.pointerType==='touch')return;const anchor=target(e);if(anchor){if(anchor!==tipAnchor)showTip(anchor,e.clientX,e.clientY);else placeTip(e.clientX,e.clientY)}});
+  document.addEventListener('pointerout',e=>{if(tipAnchor&&tipAnchor.contains(e.target)&&!tipAnchor.contains(e.relatedTarget)&&!tipAnchor.contains(document.activeElement))hideTip()});
+  document.addEventListener('focusin',e=>{const anchor=target(e);if(anchor){const box=anchor.getBoundingClientRect();showTip(anchor,box.left,box.bottom)}});
+  document.addEventListener('focusout',e=>{if(tipAnchor?.contains(e.target))hideTip()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')hideTip()});
+  document.addEventListener('click',hideTip);
+  document.addEventListener('scroll',()=>{if(tipAnchor?.contains(document.activeElement)){const box=tipAnchor.getBoundingClientRect();if(box.bottom<0||box.top>window.innerHeight)hideTip();else placeTip(box.left,box.bottom)}else hideTip()},true);
+  window.addEventListener('resize',hideTip);
  }
  function person(id){selected=String(id);render();$('summaryPersonSelect')?.focus?.({preventScroll:true})}
  function setMetric(value){if(!metrics[value])return;metric=value;render();$('sumMetric-'+metric)?.focus?.({preventScroll:true})}
- if(typeof document!=='undefined')document.addEventListener('DOMContentLoaded',render);
+ if(typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{render();setupTips()});
  return {render,person,metric:setMetric};
 })();
 

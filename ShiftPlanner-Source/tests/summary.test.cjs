@@ -23,11 +23,11 @@ console.log('PASS summary: team/person counts, hours, pay cents, leave, holidays
 const harness=fs.readFileSync(path.join(__dirname,'startup.test.cjs'),'utf8'),boot=new Function('require','__dirname',harness.slice(0,harness.indexOf('for(const standalone'))+';return boot;')(require,__dirname);
 for(const standalone of [false,true]){
  const b=boot(null,standalone);b.run('Personnel.init();view("summary");ShiftSummary.render()');
- assert(b.element('summaryDashboard').innerHTML.includes('ยังไม่มีเวรในเดือนนี้'));assert(!b.element('summaryDashboard').innerHTML.includes('NaN'));
+ assert(b.element('summaryCharts').innerHTML.includes('ยังไม่มีเวรในเดือนนี้'));assert(!b.element('summaryCharts').innerHTML.includes('NaN'));
  b.run(`state.people[0].name='<img src=x onerror=alert(1)>';activeMonth().cells={'1|1':{code:'N'},'1|3':{code:'R'}};render()`);
  const untouched=b.run('JSON.stringify(state)');b.run('ShiftSummary.person("1");ShiftSummary.metric("pay")');
  assert(b.element('summaryDashboard').innerHTML.includes('&lt;img src=x'));assert(!b.element('summaryDashboard').innerHTML.includes('<img src=x'));
- assert(b.element('summaryDashboard').innerHTML.includes('เวรรายวันของ'));assert(b.element('summaryDashboard').innerHTML.includes('580'));
+ assert(b.element('summaryCharts').innerHTML.includes('เวรรายวันของ'));assert(b.element('summaryCharts').innerHTML.includes('580'));
  assert.equal(b.run('JSON.stringify(state)'),untouched,'graph metric and person filters never change account data');
  b.run('state.people=state.people.slice(1);render()');assert(!b.element('summaryDashboard').innerHTML.includes('sum-person-heading'),'removing a selected person clears their private overview');
 }
