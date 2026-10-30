@@ -1,11 +1,11 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=path.join(__dirname,'..');
-const bundledProject=fs.readFileSync(path.join(root,'js/code-library.js'),'utf8').match(/const defaultConfig=CodeCatalog.config\('([^']+)','([^']+)'\)/);
-const APP_URL=bundledProject[1],APP_KEY=bundledProject[2],APP_EMAIL='teen@'+APP_URL.slice('https://'.length);
+const APP_PROJECT='shift-test',APP_URL='https://shift-test-default-rtdb.asia-southeast1.firebasedatabase.app',APP_KEY='AIza'+'x'.repeat(35),APP_EMAIL='teen@'+APP_PROJECT+'.firebaseapp.com';
+const appSource=fs.readFileSync(path.join(root,'js/code-library.js'),'utf8');
 const LOCAL='shiftplanner-codes-local-v1';
 const row=(code='A01',extra={})=>({code,disease:'ชื่อโรคทดสอบ',conditions:'',procedures:'',note:'',...extra});
 const serialized=(records,extra={})=>JSON.stringify({version:1,records,revision:0,dirty:true,...extra});
-function boot({storage=new Map(),tabStorage=new Map(),navigationType='navigate',fetch=async()=>{throw Error('offline')}}={}){
+function boot({storage=new Map(),tabStorage=new Map(),navigationType='navigate',configured=true,fetch=async()=>{throw Error('offline')}}={}){
  const elements=new Map(),events={},downloads=[],messages=[],timers=new Map();let timerId=0;
  const $=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',textContent:'',value:'',open:false,attributes:{},classList:{toggle(){}},setAttribute(name,value){this.attributes[name]=value},focus(){},reportValidity(){return true}});return elements.get(id)};
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -15,7 +15,11 @@ function boot({storage=new Map(),tabStorage=new Map(),navigationType='navigate',
   toast:x=>messages.push(x),download:(content,name,type)=>downloads.push({content,name,type}),
   modal(title,body,foot){$('modal').open=true;$('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modalFoot').innerHTML=foot},closeModal(){$('modal').open=false}
  });
- for(const file of ['exports','code-catalog','code-library'])vm.runInContext(fs.readFileSync(path.join(root,'js',file+'.js'),'utf8'),ctx);
+ for(const file of ['exports','code-catalog','code-library']){
+  let source=file==='code-library'?appSource:fs.readFileSync(path.join(root,'js',file+'.js'),'utf8');
+  if(file==='code-library')source=source.replace(/const defaultConfig=CodeCatalog.config\([^;]+;/,configured?"const defaultConfig=CodeCatalog.config('"+APP_URL+"','"+APP_KEY+"','"+APP_PROJECT+"');":"const defaultConfig=CodeCatalog.config('','','');");
+  vm.runInContext(source,ctx);
+ }
  const run=code=>vm.runInContext(code,ctx);
  function form(r){$('codeLetter').value=r.code[0];$('codeNumber').value=r.code.slice(1);$('codeDisease').value=r.disease;for(const k of ['conditions','procedures','note'])$('code-'+k).value=r[k]||''}
  const idFor=(code,occurrence=0)=>JSON.parse(storage.get(storage.get('shiftplanner-codes-active-v1')||LOCAL)).records.filter(r=>r.code===code)[occurrence].id;
@@ -28,9 +32,9 @@ function unzipStored(bytes){
 }
 async function main(){
  const b=boot();const model=b.run('CodeCatalog');
- assert.equal(model.loginIdentity(' TEEN ','https://test.supabase.co').email,'teen@test.supabase.co');
- assert.equal(model.loginIdentity('TEEN','https://test.supabase.co').username,'teen');
- for(const name of ['','te','<img>','teen@domain.com','กกก','a'.repeat(33)])assert.throws(()=>model.loginIdentity(name,'https://test.supabase.co'));
+ assert.equal(model.loginIdentity(' TEEN ',APP_PROJECT).email,APP_EMAIL);
+ assert.equal(model.loginIdentity('TEEN',APP_PROJECT).username,'teen');
+ for(const name of ['','te','<img>','teen@domain.com','กกก','a'.repeat(33)])assert.throws(()=>model.loginIdentity(name,APP_PROJECT));
  assert.throws(()=>model.loginIdentity('teen','https://evil.example'));
  assert(b.$('accountControls').innerHTML.includes('header-login-button'));
  assert(!b.$('accountControls').innerHTML.includes('header-logout-button'));
@@ -167,12 +171,13 @@ async function main(){
  assert(parts['xl/worksheets/sheet1.xml'].includes('=HYPERLINK(&quot;'));
  assert(!parts['xl/worksheets/sheet1.xml'].includes('<f>'),'user text is never an Excel formula');
  assert(parts['xl/worksheets/sheet1.xml'].includes('autoFilter ref="A1:F2"'));
- assert.equal(model.config('https://test.supabase.co/','sb_publishable_test').url,'https://test.supabase.co');
- assert.throws(()=>model.config('https://evil.example','sb_publishable_test'));
- assert.throws(()=>model.config('https://test.supabase.co','sb_secret_bad'));
- const jwt=role=>'e30.'+Buffer.from(JSON.stringify({role})).toString('base64url')+'.signature';
- assert(model.config('https://test.supabase.co',jwt('anon')));
- assert.throws(()=>model.config('https://test.supabase.co',jwt('service_role')));
+ assert.equal(model.config(APP_URL+'/',APP_KEY,APP_PROJECT).url,APP_URL);
+ assert.equal(model.config('','',''),null);
+ assert.equal(model.config('',APP_KEY,APP_PROJECT),null,'a project without its database URL stays unconfigured');
+ assert.throws(()=>model.config('https://evil.example',APP_KEY,APP_PROJECT));
+ assert.throws(()=>model.config(APP_URL,'private-key',APP_PROJECT));
+ assert.throws(()=>model.config(APP_URL,APP_KEY,'invalid.project'));
+ assert(model.config('https://shift-test.firebaseio.com',APP_KEY,APP_PROJECT));
 
  b.run('CodeLibrary.render();CodeLibrary.edit()');b.form(row('A001',{note:'<img src=x onerror=alert(1)>',conditions:'เงื่อนไข',procedures:'หัตถการ'}));b.run('CodeLibrary.save("")');
  assert(b.$('codesView').innerHTML.includes('สวัสดีคนเก่งของเค้า'));
@@ -261,22 +266,26 @@ async function main(){
  scoped.run('CodeLibrary.backup();CodeLibrary.local();CodeLibrary.removeAll()');assert.equal(JSON.parse(scoped.storage.get(LOCAL)).records.length,1,'backup is scoped to its library');
  scoped.run('CodeLibrary.confirmRemoveAll()');assert.equal(JSON.parse(scoped.storage.get(accountKey)).records.length,1);
 
- // Mock REST endpoints enforce optimistic revisions exactly as the SQL contract.
+ // Mock Firebase REST endpoints enforce atomic ETag preconditions.
  const cloud={revision:0,records:[]},calls=[];let fail=false,expire=false;
  async function fetch(url,options){
-  const body=options.body?JSON.parse(options.body):null;calls.push({url,options,body});
+  const body=options.body?(url.includes('securetoken')?Object.fromEntries(new URLSearchParams(options.body)):JSON.parse(options.body)):null;calls.push({url,options,body});
   if(fail)throw Error('network unavailable');
-  const response=(status,data)=>({ok:status>=200&&status<300,status,json:async()=>data});
-  assert(url.startsWith(APP_URL+'/'));assert.equal(options.headers.apikey,APP_KEY);
-  if(url.includes('/auth/v1/token')){if(url.includes('grant_type=password'))assert.equal(body.email,APP_EMAIL);return response(200,{access_token:'token',refresh_token:'refresh',user:{id:'user1',email:APP_EMAIL}})}
-  if(expire){expire=false;return response(401,{})}
-  assert.equal(options.headers.Authorization,'Bearer token');
-  if(url.includes('/rpc/save_code_library')){
-   if(body.expected_revision!==cloud.revision)return response(409,{code:'40001'});
-   cloud.records=body.entries;cloud.revision++;return response(200,cloud.revision);
+  const response=(status,data)=>({ok:status>=200&&status<300,status,json:async()=>data,headers:{get:()=>String(cloud.revision)}});
+  if(!url.startsWith(APP_URL)){
+   assert(url.startsWith('https://identitytoolkit.googleapis.com/')||url.startsWith('https://securetoken.googleapis.com/'));assert(url.endsWith('key='+APP_KEY));
+   if(url.includes('signInWithPassword')){assert.equal(body.email,APP_EMAIL);assert.equal(body.returnSecureToken,true)}
+   else{assert.equal(options.headers['Content-Type'],'application/x-www-form-urlencoded');assert.equal(body.grant_type,'refresh_token');assert.equal(body.refresh_token,'refresh')}
+   return response(200,{idToken:'token',refreshToken:'refresh',localId:'user1',email:APP_EMAIL});
   }
-  if(url.includes('/rest/v1/code_libraries'))return response(200,cloud.revision?[{revision:cloud.revision,records:cloud.records}]:[]);
-  return response(200,null);
+  if(expire){expire=false;return response(401,{})}
+  assert(url.endsWith('/codeLibraries/user1.json?auth=token'));
+  if(options.method==='PUT'){
+   if(options.headers['if-match']!==String(cloud.revision))return response(412,{});
+   assert.equal(body.revision,cloud.revision+1);
+   cloud.records=JSON.parse(body.recordsJson);cloud.revision++;return response(200,body);
+  }
+  return response(200,cloud.revision?{version:1,revision:cloud.revision,recordsJson:JSON.stringify(cloud.records)}:null);
  }
  const c=boot({storage:new Map([[LOCAL,serialized([row('A01')])]]),fetch});
  c.run('CodeLibrary.render();CodeLibrary.cloud()');
@@ -302,24 +311,23 @@ async function main(){
  assert(c.messages.at(-1).includes('เครื่องอื่น'));
  await c.run('CodeLibrary.pull()');assert.equal(JSON.parse(c.storage.get(account)).records[0].code,'B02');
  assert(JSON.parse(c.downloads.at(-1).content).records.some(r=>r.note==='offline edits'));
- expire=true;await c.run('CodeLibrary.push()');assert(calls.some(r=>r.url.includes('grant_type=refresh_token')));assert.equal(cloud.revision,3);
+ expire=true;await c.run('CodeLibrary.push()');assert(calls.some(r=>r.url.includes('securetoken.googleapis.com')));assert.equal(cloud.revision,3);
  assert(c.$('accountControls').innerHTML.includes('teen'));
  fail=true;c.form(row('B02',{note:'offline survives'}));c.run('CodeLibrary.save('+JSON.stringify(c.idFor('B02'))+')');await c.run('CodeLibrary.push()');
  assert.equal(JSON.parse(c.storage.get(account)).dirty,true);assert.equal(cloud.revision,3);
  fail=false;await c.run('CodeLibrary.logout()');assert(c.$('codeResults').innerHTML.includes('A01'));
  assert(c.$('accountControls').innerHTML.includes('header-login-button'));assert(!c.$('accountControls').innerHTML.includes('teen'));
- assert(calls.some(r=>r.url.endsWith('/auth/v1/logout?scope=local')));
+ assert(!calls.some(r=>r.url.includes('supabase.co')));
  assert.equal(JSON.parse(c.storage.get(account)).records[0].note,'offline survives');
  // Login reads the authenticated account only, preserving unsent edits and local data.
  const authUrl=APP_URL,authKey='shiftplanner-codes-account:'+authUrl+':user1';
  const authForm=client=>{client.run('CodeLibrary.cloud()');client.$('cloudUsername').value='teen';client.$('cloudPassword').value='not-a-real-password'};
- const reply=(status,data)=>({ok:status>=200&&status<300,status,json:async()=>data});
+ const reply=(status,data,etag='0')=>({ok:status>=200&&status<300,status,json:async()=>data?.access_token?{idToken:data.access_token,refreshToken:data.refresh_token,localId:data.user.id,email:data.user.email}:data,headers:{get:()=>etag}});
  const loginResult={access_token:'token',refresh_token:'refresh',user:{id:'user1',email:'test@example.com'}};
  let authFailure=false,readFailure=false,authReads=0,authWrites=0;
  const authFetch=async(url,options)=>{
-  assert(url.startsWith(APP_URL+'/'));assert.equal(options.headers.apikey,APP_KEY);
-  if(url.includes('/auth/v1/token')){if(url.includes('grant_type=password'))assert.equal(JSON.parse(options.body).email,APP_EMAIL);return authFailure?reply(401,{}):reply(200,loginResult)}
-  if(url.includes('/rest/v1/code_libraries')){authReads++;if(readFailure)throw Error('offline');assert(url.endsWith('owner_id=eq.user1'));return reply(200,[{records:[row('Z99',{note:'account data'})],revision:4}])}
+  if(!url.startsWith(APP_URL)){assert(url.endsWith('key='+APP_KEY));if(url.includes('signInWithPassword'))assert.equal(JSON.parse(options.body).email,APP_EMAIL);return authFailure?reply(400,{error:{message:'INVALID_LOGIN_CREDENTIALS'}}):reply(200,loginResult)}
+  if(url.includes('/codeLibraries/')){authReads++;if(readFailure)throw Error('offline');assert(url.endsWith('/user1.json?auth=token'));return reply(200,{version:1,recordsJson:JSON.stringify([row('Z99',{note:'account data'})]),revision:4})}
   authWrites++;return reply(200,null);
  };
  const cleanLogin=boot({storage:new Map([[LOCAL,serialized([row('L01')])],[authKey,serialized([row('A01')],{dirty:false,revision:2})]]),fetch:authFetch});
@@ -355,7 +363,7 @@ async function main(){
  // Old browsers without AbortSignal.timeout still load; a real timeout has a specific message.
  const compatible=boot({fetch:authFetch});compatible.ctx.AbortSignal={};authForm(compatible);await compatible.run('CodeLibrary.login()');
  assert.equal(JSON.parse(compatible.storage.get(authKey)).records.length,1);
- const timeoutClient=boot({fetch:async(url,options)=>url.includes('/auth/')?reply(200,loginResult):new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'}))))});
+ const timeoutClient=boot({fetch:async(url,options)=>!url.startsWith(APP_URL)?reply(200,loginResult):new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'}))))});
  authForm(timeoutClient);const timeoutLogin=timeoutClient.run('CodeLibrary.login()');
  for(let i=0;i<10;i++)await Promise.resolve();
  const deadline=[...timeoutClient.timers].find(([,timer])=>timer.delay===25000);assert(deadline);deadline[1].fn();await timeoutLogin;
@@ -363,7 +371,7 @@ async function main(){
  assert.equal(timeoutClient.storage.get(authKey),undefined);
  // Retry is bounded and never replaces edits made after an unsuccessful read.
  let retryReads=0;
- const unavailable=boot({fetch:async url=>{if(url.includes('/auth/'))return reply(200,loginResult);retryReads++;throw Error('unavailable')}});
+ const unavailable=boot({fetch:async url=>{if(!url.startsWith(APP_URL))return reply(200,loginResult);retryReads++;throw Error('unavailable')}});
  authForm(unavailable);await unavailable.run('CodeLibrary.login()');
  for(const delay of [5000,10000,20000]){
   const pending=[...unavailable.timers].find(([,timer])=>timer.delay===delay);assert(pending);
@@ -376,14 +384,14 @@ async function main(){
  assert.equal(JSON.parse(unavailable.storage.get(authKey)).records[0].code,'P88');
  unavailable.events.pagehide();assert(![...unavailable.timers.values()].some(timer=>[5000,10000,20000].includes(timer.delay)));
  // A delayed read after the tab is locked must never persist or reveal private data.
- let finishRead;const delayedRead=boot({fetch:async url=>url.includes('/auth/')?reply(200,loginResult):new Promise(resolve=>{finishRead=resolve})});
+ let finishRead;const delayedRead=boot({fetch:async url=>!url.startsWith(APP_URL)?reply(200,loginResult):new Promise(resolve=>{finishRead=resolve})});
  authForm(delayedRead);const delayedLogin=delayedRead.run('CodeLibrary.login()');
  for(let i=0;i<10;i++)await Promise.resolve();
- assert(finishRead);delayedRead.events.pagehide();finishRead(reply(200,[{records:[row('X99')],revision:1}]));await delayedLogin;
+ assert(finishRead);delayedRead.events.pagehide();finishRead(reply(200,{version:1,recordsJson:JSON.stringify([row('X99')]),revision:1}));await delayedLogin;
  assert.equal(delayedRead.storage.get(authKey),undefined);
  assert(delayedRead.$('codesView').innerHTML.includes('code-account-locked'));
  // Failed refresh expires the header login without discarding cached edits.
- offlineLogin.ctx.fetch=async(url)=>url.includes('grant_type=refresh_token')?reply(400,{}):reply(401,{});
+ offlineLogin.ctx.fetch=async(url)=>url.includes('securetoken.googleapis.com')?reply(400,{}):reply(401,{});
  await offlineLogin.run('CodeLibrary.push()');assert(offlineLogin.$('accountControls').innerHTML.includes('header-login-button'));
  assert.equal(JSON.parse(offlineLogin.storage.get(authKey)).records[0].code,'K01');
  for(const client of [cleanLogin,pendingLogin,wrongLogin,offlineLogin])assert(![...client.storage.values()].join('').includes('not-a-real-password'));
@@ -392,21 +400,37 @@ async function main(){
  authForm(invalidLogin);invalidLogin.$('cloudUsername').value='teen@domain.com';await invalidLogin.run('CodeLibrary.login()');assert.equal(invalidLoginCalls,0);
  invalidLogin.$('cloudUsername').value='teen';invalidLogin.$('cloudPassword').value='short';await invalidLogin.run('CodeLibrary.login()');assert.equal(invalidLoginCalls,0);
  assert(invalidLogin.$('cloudMessage').textContent.includes('6'));
- const unconfirmed=boot({fetch:async()=>reply(400,{error_code:'email_not_confirmed',msg:'Confirm internal identity first'})});
- authForm(unconfirmed);await unconfirmed.run('CodeLibrary.login()');assert(unconfirmed.$('modalBody').innerHTML.includes('บัญชียังไม่พร้อมใช้งาน'));assert(!unconfirmed.$('modalBody').innerHTML.includes('@'));
+ const disabledProvider=boot({fetch:async()=>reply(400,{error:{message:'OPERATION_NOT_ALLOWED'}})});
+ authForm(disabledProvider);await disabledProvider.run('CodeLibrary.login()');assert(disabledProvider.$('modalBody').innerHTML.includes('เปิด Email/Password'));
+ const notConfigured=boot({configured:false});authForm(notConfigured);await notConfigured.run('CodeLibrary.login()');assert(notConfigured.$('cloudMessage').textContent.includes('ยังไม่ได้เชื่อม Firebase'));
+ // Unreadable or unversioned server data cannot be overwritten by a blind upload.
+ for(const mode of ['missing-etag','malformed-data','permission-denied','race']){
+  let puts=0;const client=boot({fetch:async(url,options)=>{
+   if(!url.startsWith(APP_URL))return reply(200,loginResult);
+   if(options.method==='PUT'){puts++;assert.equal(options.headers['if-match'],'before-race');return reply(412,{error:'precondition failed'})}
+   if(mode==='permission-denied')return reply(401,{error:'Permission denied'});
+   if(mode==='malformed-data')return reply(200,{version:1,recordsJson:'broken-json',revision:0});
+   return reply(200,null,mode==='missing-etag'?null:'before-race');
+  }});
+  authForm(client);await client.run('CodeLibrary.login()');client.form(row('Q55'));client.run('CodeLibrary.save()');await client.run('CodeLibrary.push()');
+  assert.equal(puts,mode==='race'?1:0);
+  assert.equal(JSON.parse(client.storage.get(authKey)).dirty,true);
+  assert.equal(JSON.parse(client.storage.get(authKey)).records[0].code,'Q55');
+  assert(client.$('accountControls').innerHTML.includes('teen'));
+ }
  // Two independent browsers share the same account without a manual upload.
  let syncCloud={revision:0,records:[]},syncOffline=false,holdUpload=false,releaseUpload;
  const syncFetch=async(url,options)=>{
-  if(url.includes('/auth/v1/token'))return reply(200,loginResult);
-  if(url.includes('/auth/v1/logout'))return reply(200,null);
+  if(!url.startsWith(APP_URL))return reply(200,loginResult);
   if(syncOffline)throw Error('offline');
-  if(url.includes('/rpc/save_code_library')){
+  if(options.method==='PUT'){
    if(holdUpload)await new Promise(resolve=>{releaseUpload=resolve});
    const body=JSON.parse(options.body);
-   if(body.expected_revision!==syncCloud.revision)return reply(409,{code:'40001'});
-   syncCloud={revision:syncCloud.revision+1,records:body.entries};return reply(200,syncCloud.revision);
+   if(options.headers['if-match']!==String(syncCloud.revision))return reply(412,{});
+   assert.equal(body.revision,syncCloud.revision+1);
+   syncCloud={revision:body.revision,records:JSON.parse(body.recordsJson)};return reply(200,body);
   }
-  return reply(200,syncCloud.revision?[JSON.parse(JSON.stringify(syncCloud))]:[]);
+  return reply(200,syncCloud.revision?{version:1,revision:syncCloud.revision,recordsJson:JSON.stringify(syncCloud.records)}:null,String(syncCloud.revision));
  };
  const tickSync=async(client,delay=600)=>{
   const timer=[...client.timers].find(([,value])=>value.delay===delay);
@@ -423,6 +447,7 @@ async function main(){
  // An in-flight acknowledgement must not mark newer edits as saved or interrupt an open editor.
  holdUpload=true;device1.form(row('B12'));device1.run('CodeLibrary.save("")');
  const pendingUpload=tickSync(device1);
+ for(let i=0;i<12&&!releaseUpload;i++)await Promise.resolve();
  assert.equal(typeof releaseUpload,'function');
  device1.form(row('C13'));device1.run('CodeLibrary.save("");CodeLibrary.edit()');
  device1.$('codeDisease').value='unsaved editor text';device1.$('codeSearch').value='active search';
@@ -495,7 +520,7 @@ async function main(){
  locked.events.online();locked.events.focus();assert.equal(lockedRequests,requestsBeforeLock);assert.equal(locked.storage.get(authKey),cachedBeforeLock);
  authForm(locked);await locked.run('CodeLibrary.login()');assert.equal(locked.run('CodeLibrary.lookup("T91")[0].note'),'Owner only');
  // Authentication expiry hides account records and blocks exports and stale editor submissions.
- locked.ctx.fetch=async(url)=>url.includes('grant_type=refresh_token')?reply(400,{}):reply(401,{});
+ locked.ctx.fetch=async(url)=>url.includes('securetoken.googleapis.com')?reply(400,{}):reply(401,{});
  await locked.run('CodeLibrary.push()');
  assert(locked.$('codesView').innerHTML.includes('code-account-locked'));assert.equal(locked.$('modalBody').innerHTML,'');
  assert.throws(()=>locked.run('CodeLibrary.lookup("T91")'),/เข้าสู่ระบบ/);
@@ -503,7 +528,7 @@ async function main(){
  locked.run('CodeLibrary.backup();CodeLibrary.excel(false);CodeLibrary.confirmRecover()');
  assert.equal(locked.downloads.length,downloadsBeforeExpiry);assert.equal(locked.storage.get(authKey),cachedBeforeLock);
  // Another authenticated identity must not open or upload teen's cached records.
- const other=boot({storage:new Map(lockedStorage),fetch:async(url)=>url.includes('/auth/v1/token')?reply(200,{...loginResult,user:{id:'other-user'}}):reply(200,[])});
+ const other=boot({storage:new Map(lockedStorage),fetch:async(url)=>!url.startsWith(APP_URL)?reply(200,{...loginResult,user:{id:'other-user'}}):reply(200,[])});
  authForm(other);other.$('cloudUsername').value='other';await other.run('CodeLibrary.login()');
  assert.equal(other.run('CodeLibrary.lookup("T91").length'),0);assert.equal(other.storage.get(authKey),cachedBeforeLock);
  // A delayed login response after navigating away must not silently restore a session.
@@ -519,7 +544,7 @@ async function main(){
  const tabKey='shiftplanner-codes-tab-session-v1';
  syncCloud={revision:1,records:model.records([row('T91',{note:'reload retained'})])};
  let renewalCount=0;
- const tabFetch=async(url,options)=>{if(url.includes('grant_type=refresh_token'))renewalCount++;return syncFetch(url,options)};
+ const tabFetch=async(url,options)=>{if(url.includes('securetoken.googleapis.com'))renewalCount++;return syncFetch(url,options)};
  const signedInTab=boot({fetch:tabFetch});authForm(signedInTab);await signedInTab.run('CodeLibrary.login()');
  assert(signedInTab.tabStorage.has(tabKey));assert(!JSON.stringify([...signedInTab.tabStorage]).includes('not-a-real-password'));
  assert(!JSON.stringify([...signedInTab.storage]).includes('refresh_token'));
@@ -551,8 +576,11 @@ async function main(){
  const afterLogout=boot({storage:reload.storage,tabStorage:reload.tabStorage,navigationType:'reload',fetch:tabFetch});
  await afterLogout.run('CodeLibrary.ready');assert(afterLogout.$('accountControls').innerHTML.includes('header-login-button'));
  console.log('PASS: same-tab reload restores verified login; new/restored tabs, expired tokens and explicit logout stay locked');
- const sql=fs.readFileSync(path.join(root,'supabase/code-library.sql'),'utf8');
- assert(sql.includes('enable row level security'));assert(sql.includes('security invoker'));assert(sql.includes("errcode = '40001'"));assert(sql.includes('and revision = expected_revision'));
+ const rules=JSON.parse(fs.readFileSync(path.join(root,'firebase/database.rules.json'),'utf8')).rules;
+ assert.equal(rules['.read'],false);assert.equal(rules['.write'],false);
+ assert(rules.codeLibraries.$uid['.read'].includes('auth.uid === $uid'));
+ assert(rules.codeLibraries.$uid['.write'].includes('auth.uid === $uid'));
+ assert(rules.codeLibraries.$uid.revision['.validate'].includes('data.val() + 1'));
  console.log('PASS: duplicate-code entries, independent editing/deletion, stable legacy migration, duplicate-safe JSON/Excel/cloud roundtrip, filtering, escaped notes, tab conflicts, recovery, cloud auth and offline preservation');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

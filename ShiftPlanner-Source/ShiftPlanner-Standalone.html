@@ -2067,20 +2067,19 @@ const CodeCatalog = (() => {
   if(!value||value.version!==1||!Number.isSafeInteger(value.revision)||value.revision<0||typeof value.dirty!=='boolean')throw Error('ข้อมูลคลังรหัสเสียหาย');
   return {version:1,revision:value.revision,dirty:value.dirty,records:records(value.records)};
  }
- function config(url,key){
-  url=url.trim().replace(/\/$/,'');key=key.trim();
-  if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url))throw Error('กรุณาใส่ Project URL รูปแบบ https://ชื่อโปรเจกต์.supabase.co');
-  let publicKey=/^sb_publishable_[A-Za-z0-9_-]+$/.test(key);
-  if(!publicKey&&key.split('.').length===3){try{const payload=JSON.parse(atob(key.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));publicKey=payload.role==='anon'}catch{}}
-  if(!publicKey)throw Error('ใช้ Publishable key หรือ anon key เท่านั้น ห้ามใช้ secret / service_role');
-  return {url,key};
+ function config(url,key,projectId){
+  url=String(url??'').trim().replace(/\/$/,'');key=String(key??'').trim();projectId=String(projectId??'').trim();
+  if(!url)return null;
+  if(!/^https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)?\.(?:firebaseio\.com|firebasedatabase\.app)$/.test(url))throw Error('databaseURL ของ Firebase ไม่ถูกต้อง');
+  if(!/^AIza[A-Za-z0-9_-]{35}$/.test(key))throw Error('กรุณาใช้ apiKey สาธารณะของ Firebase Web app');
+  if(!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(projectId))throw Error('projectId ของ Firebase ไม่ถูกต้อง');
+  return {url,key,projectId};
  }
- function loginIdentity(username,url){
+ function loginIdentity(username,projectId){
   const name=String(username??'').trim().toLowerCase();
   if(!/^[a-z][a-z0-9._-]{2,31}$/.test(name))throw Error('Username ใช้ตัวอักษรอังกฤษขึ้นต้น ตามด้วยตัวอักษร ตัวเลข . _ - รวม 3–32 ตัว');
-  const match=/^https:\/\/([a-z0-9-]+\.supabase\.co)\/?$/.exec(url);
-  if(!match)throw Error('Project URL ไม่ถูกต้อง');
-  return {username:name,email:name+'@'+match[1]};
+  if(!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(String(projectId??'')))throw Error('ยังไม่ได้เชื่อม Firebase กรุณาให้ผู้พัฒนาตั้งค่าโปรเจกต์ก่อน');
+  return {username:name,email:name+'@'+projectId+'.firebaseapp.com'};
  }
  function xlsx(rows){
   rows=records(rows);
@@ -2109,8 +2108,8 @@ const CodeLibrary=(()=>{
  const LOCAL='shiftplanner-codes-local-v1',ACTIVE='shiftplanner-codes-active-v1';
  const empty=()=>({version:1,records:[],revision:0,dirty:false});
  // Public project configuration only. Passwords and session tokens are never bundled.
- const defaultConfig=CodeCatalog.config('https://omtcyjoewqtfsreshgfu.supabase.co','sb_publishable_3Ixd4qU4vGBYVRJUqTurSg_vFabVA5B');
- const config=defaultConfig;
+ const defaultConfig=CodeCatalog.config('https://teen-program-default-rtdb.asia-southeast1.firebasedatabase.app','AIzaSyAaF-kv8okemnhB1oDUuelzJCARIvMcU-o','teen-program');
+ const config=defaultConfig||{url:'firebase:unconfigured',key:'',projectId:''};
  const TAB_SESSION='shiftplanner-codes-tab-session-v1';
  let store=LOCAL,doc=empty(),session=null,loadError='',rawBackup='',storageWarning='',stale=false,busy=false,message='',category=[],query='',kind=[],page=1;
  const backedUpRecords=new Map();let pendingClear=null;
@@ -2173,7 +2172,7 @@ const CodeLibrary=(()=>{
  function forgetTabSession(){try{sessionStorage.removeItem(TAB_SESSION)}catch{}}
  function rememberTabSession(){
   if(!session?.refresh_token)return;
-  try{sessionStorage.setItem(TAB_SESSION,JSON.stringify({project:config.url,userId:session.user.id,username:session.username,refreshToken:session.refresh_token}))}catch{}
+  try{sessionStorage.setItem(TAB_SESSION,JSON.stringify({project:config.url,projectId:config.projectId,userId:session.user.id,username:session.username,refreshToken:session.refresh_token}))}catch{}
  }
  function readTabSession(){
   try{
@@ -2181,8 +2180,8 @@ const CodeLibrary=(()=>{
    if(typeof performance==='undefined'||performance.getEntriesByType?.('navigation')?.[0]?.type!=='reload'){forgetTabSession();return null}
    const saved=JSON.parse(sessionStorage.getItem(TAB_SESSION)||'null');
    if(!saved)return null;
-   if(saved.project!==config.url||typeof saved.userId!=='string'||!saved.userId||typeof saved.refreshToken!=='string'||!saved.refreshToken||saved.refreshToken.length>20000)throw Error('Invalid tab session');
-   CodeCatalog.loginIdentity(saved.username,config.url);return saved;
+   if(saved.project!==config.url||saved.projectId!==config.projectId||typeof saved.userId!=='string'||!saved.userId||typeof saved.refreshToken!=='string'||!saved.refreshToken||saved.refreshToken.length>20000)throw Error('Invalid tab session');
+   CodeCatalog.loginIdentity(saved.username,config.projectId);return saved;
   }catch{forgetTabSession();return null}
  }
  function accountLocked(){return store!==LOCAL&&(!session||store!=='shiftplanner-codes-account:'+config.url+':'+session.user.id)}
@@ -2244,7 +2243,11 @@ const CodeLibrary=(()=>{
   if(!session)throw Error('กรุณาเข้าสู่ระบบใหม่เพื่อส่งข้อมูลที่ค้างไว้');
   if(loadError)throw Error(loadError);
   const target=store,owner=session.user.id,next=CodeCatalog.records(doc.records),snapshot=JSON.stringify(next);
-  const revision=await request('/rest/v1/rpc/save_code_library',{method:'POST',body:{expected_revision:doc.revision,entries:next}});
+  const expected=doc.revision,remote=await request('library'),online=remoteDocument(remote.data);
+  if((online?.revision||0)!==expected)throw conflictError();
+  if(!remote.etag)throw Error('Firebase ไม่ส่งรุ่นข้อมูลกลับมา จึงยังไม่บันทึกเพื่อป้องกันข้อมูลทับกัน');
+  const revision=expected+1;
+  await request('library',{method:'PUT',body:{version:1,revision,recordsJson:JSON.stringify(next)},etag:remote.etag});
   if(!Number.isSafeInteger(revision)||revision<1)throw Error('รูปแบบรุ่นข้อมูลออนไลน์ไม่ถูกต้อง');
   if(store!==target||session?.user.id!==owner)throw Error('บัญชีถูกเปลี่ยน ข้อมูลในเครื่องยังรอส่ง');
   // Edits made during a background upload belong to the next revision, not this acknowledgement.
@@ -2442,39 +2445,61 @@ const CodeLibrary=(()=>{
   button.setAttribute('aria-label',label);button.setAttribute('title',label);button.setAttribute('aria-pressed',String(visible));
   button.innerHTML=icon(visible?'eye-off':'eye');
  }
- async function request(path,{method='GET',body,auth=true,retry=true}={}){
-  if(!config)throw Error('ยังไม่ได้ตั้งค่า Supabase');
+ function conflictError(){return Object.assign(Error('ข้อมูลออนไลน์เปลี่ยนจากเครื่องอื่น กรุณาสำรอง JSON ในเครื่อง แล้วโหลดข้อมูลออนไลน์ก่อนรวมรายการและส่งใหม่'),{code:'40001'})}
+ function authResult(result){
+  const id=result?.localId||result?.user_id,token=result?.idToken||result?.id_token,refresh=result?.refreshToken||result?.refresh_token;
+  if([id,token,refresh].some(value=>typeof value!=='string'||!value||value.length>20000))throw Error('ข้อมูลเข้าสู่ระบบไม่ครบถ้วน');
+  return {access_token:token,refresh_token:refresh,user:{id,email:result.email||''}};
+ }
+ async function request(path,{method='GET',body,auth=path==='library',retry=true,etag}={}){
+  if(!defaultConfig)throw Error('ยังไม่ได้เชื่อม Firebase กรุณาให้ผู้พัฒนาตั้งค่าโปรเจกต์ก่อน');
   if(auth&&!session)throw Error('กรุณาเข้าสู่ระบบใหม่');
   const requestEpoch=authEpoch,requestOwner=session?.user.id;
-  const headers={apikey:config.key,'Content-Type':'application/json'};
-  if(auth)headers.Authorization='Bearer '+session.access_token;
+  const headers={'Content-Type':'application/json'};let url,payload;
+  if(path==='login'){
+   url='https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key='+encodeURIComponent(config.key);
+   payload=JSON.stringify({...body,returnSecureToken:true});
+  }else if(path==='refresh'){
+   url='https://securetoken.googleapis.com/v1/token?key='+encodeURIComponent(config.key);
+   headers['Content-Type']='application/x-www-form-urlencoded';
+   payload='grant_type=refresh_token&refresh_token='+encodeURIComponent(body.refresh_token);
+  }else if(path==='library'){
+   url=config.url+'/codeLibraries/'+encodeURIComponent(requestOwner)+'.json?auth='+encodeURIComponent(session.access_token);
+   if(method==='GET')headers['X-Firebase-ETag']='true';
+   if(etag)headers['if-match']=etag;
+   if(body!==undefined)payload=JSON.stringify(body);
+  }else throw Error('คำขอ Firebase ไม่ถูกต้อง');
   let response,result,timer,timedOut=false;
   const controller=new AbortController();
   try{
    timer=setTimeout(()=>{timedOut=true;controller.abort()},25000);
-   response=await fetch(config.url+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal});
+   response=await fetch(url,{method,headers,body:payload,signal:controller.signal,cache:'no-store',referrerPolicy:'no-referrer'});
    try{result=await response.json()}catch(e){if(controller.signal.aborted)throw e;if(response.ok)throw Object.assign(Error('เซิร์ฟเวอร์ส่งข้อมูลไม่ครบหรือรูปแบบไม่ถูกต้อง กรุณาลองโหลดอีกครั้ง'),{invalidResponse:true});result=null}
   }catch(e){
-   const detail=timedOut||e.name==='TimeoutError'?'เซิร์ฟเวอร์ Supabase ไม่ตอบกลับภายใน 25 วินาที':e.invalidResponse?e.message:'ติดต่อบริการ Supabase ไม่สำเร็จ อาจเป็นที่บริการหรือเส้นทางเชื่อมต่อ';
+   const detail=timedOut||e.name==='TimeoutError'?'เซิร์ฟเวอร์ Firebase ไม่ตอบกลับภายใน 25 วินาที':e.invalidResponse?e.message:'ติดต่อบริการ Firebase ไม่สำเร็จ อาจเป็นที่บริการหรือเส้นทางเชื่อมต่อ';
    throw Object.assign(Error(detail+' ข้อมูลในเครื่องยังอยู่'),{retryable:true});
   }finally{clearTimeout(timer)}
   if(auth&&(requestEpoch!==authEpoch||session?.user.id!==requestOwner))throw Error('บัญชีถูกเปลี่ยน กรุณาเข้าสู่ระบบใหม่');
-  if(response.status===401&&auth&&retry&&session.refresh_token){
+  const reason=typeof result?.error==='string'?result.error:result?.error?.message||'';
+  if(response.status===401&&auth&&retry&&session.refresh_token&&!/Permission denied/i.test(reason)){
    try{
-    const refreshed=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token},auth:false});
+    const refreshed=await request('refresh',{method:'POST',body:{refresh_token:session.refresh_token}});
     if(requestEpoch!==authEpoch||session?.user.id!==requestOwner)throw Error('กรุณาเข้าสู่ระบบใหม่');
-    if(!refreshed?.access_token||refreshed.user?.id!==session.user.id)throw Error('กรุณาเข้าสู่ระบบใหม่');
-    session={...refreshed,username:session.username};rememberTabSession();return request(path,{method,body,auth,retry:false});
-   }catch(e){lockAccount();throw e}
+    if(refreshed.user.id!==session.user.id)throw Error('กรุณาเข้าสู่ระบบใหม่');
+    session={...refreshed,username:session.username};rememberTabSession();return request(path,{method,body,auth,retry:false,etag});
+   }catch(e){if(requestEpoch===authEpoch&&!e.retryable)lockAccount();throw e}
   }
   if(!response.ok){
-   if(result?.code==='40001')throw Object.assign(Error('ข้อมูลออนไลน์เปลี่ยนจากเครื่องอื่น กรุณาสำรอง JSON ในเครื่อง แล้วโหลดข้อมูลออนไลน์ก่อนรวมรายการและส่งใหม่'),{code:'40001'});
-   if(result?.error_code==='email_not_confirmed')throw Error('บัญชียังไม่พร้อมใช้งาน กรุณาให้ผู้พัฒนายืนยันบัญชีใน Supabase ก่อน');
-   if(response.status===401||result?.error_code==='invalid_credentials'){if(auth)lockAccount();throw Error('เข้าสู่ระบบไม่ได้ Username หรือ Password ไม่ตรงกับบัญชีที่ตั้งไว้ หากยังไม่ได้สร้างบัญชี ให้ผู้ดูแลตั้งค่าบัญชีก่อน')}
-   if(result?.code==='PGRST202'||result?.code==='42P01')throw Error('ยังไม่พบตารางหรือฟังก์ชัน กรุณารัน supabase/code-library.sql ใน SQL Editor ก่อน');
-   throw Object.assign(Error('เชื่อมต่อไม่สำเร็จ: '+(result?.msg||result?.message||result?.error_description||response.status)),{retryable:response.status===429||response.status>=500});
+   if(response.status===412)throw conflictError();
+   if(/INVALID_LOGIN_CREDENTIALS|EMAIL_NOT_FOUND|INVALID_PASSWORD/.test(reason))throw Error('เข้าสู่ระบบไม่ได้ Username หรือ Password ไม่ตรงกับบัญชีที่ตั้งไว้');
+   if(/USER_DISABLED/.test(reason)){if(auth)lockAccount();throw Error('บัญชีนี้ถูกระงับ กรุณาติดต่อผู้พัฒนา')}
+   if(/OPERATION_NOT_ALLOWED|PASSWORD_LOGIN_DISABLED/.test(reason))throw Error('กรุณาเปิด Email/Password ใน Firebase Authentication ก่อน');
+   if(/API_KEY_INVALID|API key not valid|PROJECT_NUMBER_MISMATCH|CONFIGURATION_NOT_FOUND/.test(reason))throw Error('การตั้งค่า Firebase ไม่ตรงกับโปรเจกต์ กรุณาให้ผู้พัฒนาตรวจ apiKey และ projectId');
+   if(/Permission denied/i.test(reason)||response.status===403)throw Error('Firebase ไม่อนุญาตให้อ่านหรือบันทึกคลัง กรุณาตรวจ Realtime Database Rules');
+   if(auth&&response.status===401)lockAccount();
+   throw Object.assign(Error('เชื่อมต่อ Firebase ไม่สำเร็จ: '+(reason||response.status)),{retryable:response.status===429||response.status>=500});
   }
-  return result;
+  return path==='library'?{data:result,etag:response.headers?.get('etag')}:authResult(result);
  }
  async function operation(fn){
   if(busy)return;busy=true;cancelAutoSync();message='กำลังเชื่อมต่อ…';render();cloud();
@@ -2483,14 +2508,14 @@ const CodeLibrary=(()=>{
  }
  async function login(){
   if(busy||!$('cloudForm').reportValidity())return;
-  let identity;try{identity=CodeCatalog.loginIdentity($('cloudUsername').value,config.url)}catch(e){$('cloudMessage').textContent=e.message;return}
+  let identity;try{identity=CodeCatalog.loginIdentity($('cloudUsername').value,config.projectId)}catch(e){$('cloudMessage').textContent=e.message;return}
   const password=$('cloudPassword').value;
   if(password.length<6){$('cloudMessage').textContent='Password ต้องมีอย่างน้อย 6 ตัวอักษร';return}
   const {username,email}=identity;
   const attemptEpoch=authEpoch;
   loginUsername=username;$('cloudPassword').value='';
   await operation(async()=>{
-   const result=await request('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password},auth:false});
+   const result=await request('login',{method:'POST',body:{email,password},auth:false});
    if(attemptEpoch!==authEpoch)throw Error('กรุณาเข้าสู่ระบบใหม่');
    if(typeof result?.user?.id!=='string'||!result.user.id||!result.access_token)throw Error('ข้อมูลเข้าสู่ระบบไม่ครบถ้วน');
    const previousSession=session;
@@ -2518,7 +2543,7 @@ const CodeLibrary=(()=>{
   if(!saved)return;
   const attemptEpoch=authEpoch;busy=true;render();
   try{
-   const result=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:saved.refreshToken},auth:false});
+   const result=await request('refresh',{method:'POST',body:{refresh_token:saved.refreshToken},auth:false});
    if(attemptEpoch!==authEpoch)return;
    if(!result?.access_token||!result.refresh_token||result.user?.id!==saved.userId)throw Error('กรุณาเข้าสู่ระบบใหม่');
    session={...result,username:saved.username};loginUsername=saved.username;
@@ -2528,11 +2553,14 @@ const CodeLibrary=(()=>{
    if(attemptEpoch===authEpoch){lockAccount();toast(e.retryable?'ยังตรวจสอบบัญชีไม่ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วเข้าสู่ระบบใหม่':'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่')}
   }finally{busy=false;render();scheduleAutoSync()}
  }
+ function remoteDocument(data){
+  if(data===null)return null;
+  if(!data||data.version!==1||typeof data.recordsJson!=='string')throw Error('รูปแบบข้อมูล Firebase ไม่ถูกต้อง');
+  return CodeCatalog.document({version:1,records:JSON.parse(data.recordsJson),revision:data.revision,dirty:false});
+ }
  async function readRemote(){
   if(!session)throw Error('กรุณาเข้าสู่ระบบใหม่');
-  const result=await request('/rest/v1/code_libraries?select=records,revision&owner_id=eq.'+encodeURIComponent(session.user.id));
-  if(!Array.isArray(result)||result.length>1)throw Error('รูปแบบข้อมูลออนไลน์ไม่ถูกต้อง');
-  return result.length?CodeCatalog.document({version:1,records:result[0].records,revision:result[0].revision,dirty:false}):null;
+  const {data}=await request('library');return remoteDocument(data);
  }
  async function push(){
   if(!session)return;
@@ -2571,11 +2599,8 @@ const CodeLibrary=(()=>{
     try{if(autoSyncBlocked)throw Error('รอแก้ไขข้อมูล');await saveRemote()}
     catch{warning=' · ยังมีข้อมูลรอส่งในเครื่องนี้ เข้าสู่ระบบอีกครั้งเพื่อส่งต่อ'}
    }
-   try{await request('/auth/v1/logout?scope=local',{method:'POST'})}catch(e){warning+=' · ยืนยันการออกจากระบบกับเซิร์ฟเวอร์ไม่ได้ กรุณาเข้าสู่ระบบใหม่เมื่อเชื่อมต่อได้'}
-   finally{
-    try{switchStore(LOCAL)}catch(e){warning+=' · '+e.message}
-    lockAccount();loginUsername='teen';
-   }
+   try{switchStore(LOCAL)}catch(e){warning+=' · '+e.message}
+   lockAccount();loginUsername='teen';
    message='ออกจากระบบบนเครื่องนี้แล้ว'+warning;toast(message);
   });
   if($('modal').open&&$('modalTitle').textContent==='เข้าสู่ระบบ')closeModal();

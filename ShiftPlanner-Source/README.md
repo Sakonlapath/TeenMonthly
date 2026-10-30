@@ -10,8 +10,8 @@
 - เมนู **โค้ดรหัส**: เพิ่ม แก้ไข ลบ แบ่งหมวด A–Z พร้อมเลขรหัสและชื่อโรค
 - เก็บเงื่อนไข หัตถการ และ Note แยกกันได้ ค้นหาได้ทุกช่องพร้อมตัวกรอง
 - ส่งออก Excel `.xlsx` ทั้งคลังหรือเฉพาะผลค้นหา พร้อมสำรอง/รวม JSON แยกจากตารางเวร
-- ใช้ออฟไลน์ได้ทันที เชื่อม Supabase ฟรีเพื่อส่ง/โหลดคลังข้ามเครื่องแบบกดเอง
-- เริ่มเชื่อมออนไลน์ตาม [คู่มือฐานข้อมูลออนไลน์](ONLINE-DATABASE.md) และรัน [ไฟล์ SQL](supabase/code-library.sql)
+- ใช้ออฟไลน์ได้ทันที เชื่อม Firebase Authentication + Realtime Database เพื่อบันทึกคลังข้ามเครื่องอัตโนมัติ
+- เริ่มเชื่อมตาม [คู่มือฐานข้อมูลออนไลน์](ONLINE-DATABASE.md) และใช้ [กฎฐานข้อมูล](firebase/database.rules.json)
 - แก้ต้นฉบับใน `js/code-catalog.js`, `js/code-library.js`, `css/code-library.css`, `css/kitty.css` แล้วรัน `node scripts/build-standalone.cjs` เพื่ออัปเดตไฟล์เดียว
 
 ## เปิดใช้งาน

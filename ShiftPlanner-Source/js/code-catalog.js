@@ -64,20 +64,19 @@ const CodeCatalog = (() => {
   if(!value||value.version!==1||!Number.isSafeInteger(value.revision)||value.revision<0||typeof value.dirty!=='boolean')throw Error('ข้อมูลคลังรหัสเสียหาย');
   return {version:1,revision:value.revision,dirty:value.dirty,records:records(value.records)};
  }
- function config(url,key){
-  url=url.trim().replace(/\/$/,'');key=key.trim();
-  if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url))throw Error('กรุณาใส่ Project URL รูปแบบ https://ชื่อโปรเจกต์.supabase.co');
-  let publicKey=/^sb_publishable_[A-Za-z0-9_-]+$/.test(key);
-  if(!publicKey&&key.split('.').length===3){try{const payload=JSON.parse(atob(key.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));publicKey=payload.role==='anon'}catch{}}
-  if(!publicKey)throw Error('ใช้ Publishable key หรือ anon key เท่านั้น ห้ามใช้ secret / service_role');
-  return {url,key};
+ function config(url,key,projectId){
+  url=String(url??'').trim().replace(/\/$/,'');key=String(key??'').trim();projectId=String(projectId??'').trim();
+  if(!url)return null;
+  if(!/^https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)?\.(?:firebaseio\.com|firebasedatabase\.app)$/.test(url))throw Error('databaseURL ของ Firebase ไม่ถูกต้อง');
+  if(!/^AIza[A-Za-z0-9_-]{35}$/.test(key))throw Error('กรุณาใช้ apiKey สาธารณะของ Firebase Web app');
+  if(!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(projectId))throw Error('projectId ของ Firebase ไม่ถูกต้อง');
+  return {url,key,projectId};
  }
- function loginIdentity(username,url){
+ function loginIdentity(username,projectId){
   const name=String(username??'').trim().toLowerCase();
   if(!/^[a-z][a-z0-9._-]{2,31}$/.test(name))throw Error('Username ใช้ตัวอักษรอังกฤษขึ้นต้น ตามด้วยตัวอักษร ตัวเลข . _ - รวม 3–32 ตัว');
-  const match=/^https:\/\/([a-z0-9-]+\.supabase\.co)\/?$/.exec(url);
-  if(!match)throw Error('Project URL ไม่ถูกต้อง');
-  return {username:name,email:name+'@'+match[1]};
+  if(!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(String(projectId??'')))throw Error('ยังไม่ได้เชื่อม Firebase กรุณาให้ผู้พัฒนาตั้งค่าโปรเจกต์ก่อน');
+  return {username:name,email:name+'@'+projectId+'.firebaseapp.com'};
  }
  function xlsx(rows){
   rows=records(rows);
