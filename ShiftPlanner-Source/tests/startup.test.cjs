@@ -9,7 +9,7 @@ const ctx=vm.createContext({console,TextEncoder,document:{getElementById:element
 const run=x=>vm.runInContext(x,ctx);
 ctx.window={addEventListener(){}};
 if(standalone){const html=fs.readFileSync(path.join(__dirname,'../ShiftPlanner-Standalone.html'),'utf8');for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))run(match[1])}
-else for(const file of ['core','data','export-template','exports','app','help-chat','editor','code-catalog','code-library'])run(fs.readFileSync(path.join(__dirname,'../js/'+file+'.js'),'utf8'));
+else for(const file of ['core','data','export-template','exports','app','help-chat','editor','code-catalog','code-library','personnel-model','personnel-sync','personnel'])run(fs.readFileSync(path.join(__dirname,'../js/'+file+'.js'),'utf8'));
 return{ctx,run,element,stored:()=>stored,flushTimers(){for(const[id,callback]of [...timers]){timers.delete(id);callback()}}};
 }
 for(const standalone of [false,true]){

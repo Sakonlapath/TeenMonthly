@@ -34,7 +34,7 @@ function normalizeCalendarDemand(state,month){
 }
 function cell(m,p,d){return m.cells[key(p,d)]||{code:'',block:'',locked:false}}
 function manualPeople(m){return new Set(Object.entries(m.cells).filter(([,c])=>c.code&&c.locked).map(([k])=>k.split('|')[0]))}
-function monthPeople(state,month){const excluded=new Set(state.months[month].excludedStaffIds||[]);return state.people.filter(p=>!excluded.has(p.id))}
+function monthPeople(state,month){const excluded=new Set(state.months[month].excludedStaffIds||[]);return state.people.filter(p=>!excluded.has(p.id)&&(!p.removedFrom||month<p.removedFrom))}
 function group(state,month){const included=month?new Set(monthPeople(state,month).map(p=>p.id)):null;return state.people.slice(1,4).filter(p=>!included||included.has(p.id)).map(p=>p.id)}
 function canUseSymbol(p,value){return value===''||p.id!=='9'||value==='X'}
 function eligibleOnDay(p,month,d,code){return p.active&&canUseSymbol(p,code)&&p.allowed.includes(code)}

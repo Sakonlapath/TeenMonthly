@@ -83,10 +83,13 @@ const CodeLibrary=(()=>{
  function accountLocked(){return store!==LOCAL&&(!session||store!=='shiftplanner-codes-account:'+config.url+':'+session.user.id)}
  function requireAccountAccess(){if(accountLocked())throw Error('กรุณาเข้าสู่ระบบก่อนเปิดหรือแก้ไขคลังบัญชี')}
  function clearAccountChat(){if(typeof clearDiseaseChat==='function')clearDiseaseChat()}
+ const accountListeners=new Set(),logoutListeners=new Set();
+ function account(){return session?{id:session.user.id,username:session.username}:null}
+ function notifyAccount(){for(const fn of accountListeners){try{fn(account())}catch(e){toast(e.message)}}}
  function lockAccount(preserveTabSession=false){
   resetReadRetry();
   if(!preserveTabSession)forgetTabSession();
-  authEpoch++;session=null;cancelAutoSync();pendingClear=null;clearAccountChat();
+  authEpoch++;session=null;cancelAutoSync();pendingClear=null;clearAccountChat();notifyAccount();
   if($('modal').open)closeModal();
   $('modalBody').innerHTML='';$('modalFoot').innerHTML='';
   message='กรุณาเข้าสู่ระบบใหม่เพื่อเปิดคลังบัญชี';render();
@@ -318,7 +321,7 @@ const CodeLibrary=(()=>{
   const logged=!!session;
   const disabled=busy?'disabled':'';
   const notice=`<p id="cloudMessage" class="code-message account-notice" role="status" aria-live="polite">${esc(autoSyncError||message)}</p>`;
-  const intro=`<div class="account-welcome"><span class="account-avatar">${icon('user')}<span class="kitty-bow" aria-hidden="true"></span></span><div><p class="account-kicker">${logged?'บัญชีของคุณ':'โปรแกรมพฤกษา'}</p><h3>${logged?'สวัสดี, '+esc(session.username):'ยินดีต้อนรับ'}</h3><p class="account-caption">${logged?'คลังโค้ดรหัสของคุณ':'เข้าสู่ระบบเพื่อเปิดคลังโค้ดรหัส'}</p></div>${logged?'<span class="account-signed-in">'+icon('check')+' เข้าสู่ระบบแล้ว</span>':''}</div>`;
+  const intro=`<div class="account-welcome"><span class="account-avatar">${icon('user')}<span class="kitty-bow" aria-hidden="true"></span></span><div><p class="account-kicker">${logged?'บัญชีของคุณ':'โปรแกรมพฤกษา'}</p><h3>${logged?'สวัสดี, '+esc(session.username):'ยินดีต้อนรับ'}</h3><p class="account-caption">${logged?'คลังโค้ดรหัสและสมุดบุคลากรของคุณ':'เข้าสู่ระบบเพื่อเปิดคลังรหัสและบุคลากร'}</p></div>${logged?'<span class="account-signed-in">'+icon('check')+' เข้าสู่ระบบแล้ว</span>':''}</div>`;
   let content;
   if(logged){
    const issue=loadError||storageWarning||autoSyncError||libraryReadError;
@@ -327,7 +330,7 @@ const CodeLibrary=(()=>{
    const detail=issue?(autoSyncBlocked?'ข้อมูลยังอยู่ในเครื่อง ตรวจข้อความด้านล่าง':autoSyncError?'ข้อมูลยังอยู่ในเครื่อง จะลองส่งอีกครั้งอัตโนมัติ':issue):(busy||autoSyncTask?'กรุณารอสักครู่':doc.dirty?'กำลังเตรียมส่งรายการล่าสุด':'เพิ่มหรือแก้ไขรหัส ระบบจะบันทึกขึ้นออนไลน์ให้');
    content=`${intro}<div class="account-stats"><div><span>รหัสในคลังนี้</span><strong>${doc.records.length}<small>รายการ</small></strong></div><div><span>${icon('star')} รายการโปรด</span><strong>${doc.records.filter(r=>r.favorite).length}<small>รายการ</small></strong></div></div><section class="account-sync-status account-sync-${state}" aria-label="สถานะข้อมูล"><span class="account-status-icon">${icon(issue?'conditions':busy||autoSyncTask?'cloud':doc.dirty?'upload':'check')}</span><div><h4>${heading}</h4><p>${esc(detail)}</p></div></section>${notice}<div class="account-actions"><button class="primary account-upload" onclick="CodeLibrary.push()" ${busy||autoSyncTask||loadError?'disabled':''}>${icon('upload')}<span>${busy?'กำลังเชื่อมต่อ…':'บันทึกขึ้นออนไลน์'}</span></button><div class="account-secondary-actions"><button onclick="CodeLibrary.pullPrompt()" ${busy||autoSyncTask||loadError?'disabled':''}><span class="account-action-icon">${icon('download')}</span><span><b>โหลดจากออนไลน์</b><small>ใช้ข้อมูลที่บันทึกไว้บนออนไลน์</small></span>${icon('arrow','account-action-arrow')}</button><button onclick="CodeLibrary.copyLocal()" ${busy||autoSyncTask||loadError?'disabled':''}><span class="account-action-icon">${icon('plus')}</span><span><b>รวมรหัสจากในเครื่อง</b><small>นำมาเพิ่มในคลังบัญชีนี้</small></span>${icon('arrow','account-action-arrow')}</button></div></div><div class="account-session-actions"><button class="account-signout" onclick="CodeLibrary.logout()" ${disabled}>${icon('logout')} ออกจากระบบ</button></div>`;
   }else{
-   content=`${intro}${notice}<form id="cloudForm" class="code-form account-login-form" onsubmit="event.preventDefault();CodeLibrary.login()"><label class="field">ชื่อผู้ใช้<input id="cloudUsername" type="text" required minlength="3" maxlength="32" pattern="[A-Za-z][A-Za-z0-9._-]{2,31}" value="${esc(loginUsername)}" placeholder="teen" autocomplete="username" autocapitalize="none" spellcheck="false" ${disabled}></label><div class="field"><label for="cloudPassword">รหัสผ่าน</label><div class="account-password"><input id="cloudPassword" type="password" required minlength="6" autocomplete="current-password" placeholder="กรอกรหัสผ่าน" ${disabled}><button id="cloudPasswordToggle" class="account-password-toggle" type="button" onclick="CodeLibrary.togglePassword()" aria-controls="cloudPassword" aria-label="แสดงรหัสผ่าน" aria-pressed="false" title="แสดงรหัสผ่าน" ${disabled}>${icon('eye')}</button></div></div><button class="primary account-submit" type="submit" ${disabled}>${busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}${icon('arrow')}</button></form>`;
+   content=`${intro}${notice}<form id="cloudForm" class="code-form account-login-form" onsubmit="event.preventDefault();CodeLibrary.login()"><label class="field">ชื่อผู้ใช้<input id="cloudUsername" type="text" required minlength="3" maxlength="32" pattern="[A-Za-z](?:[A-Za-z0-9._]|-){2,31}" value="${esc(loginUsername)}" placeholder="teen" autocomplete="username" autocapitalize="none" spellcheck="false" ${disabled}></label><div class="field"><label for="cloudPassword">รหัสผ่าน</label><div class="account-password"><input id="cloudPassword" type="password" required minlength="6" autocomplete="current-password" placeholder="กรอกรหัสผ่าน" ${disabled}><button id="cloudPasswordToggle" class="account-password-toggle" type="button" onclick="CodeLibrary.togglePassword()" aria-controls="cloudPassword" aria-label="แสดงรหัสผ่าน" aria-pressed="false" title="แสดงรหัสผ่าน" ${disabled}>${icon('eye')}</button></div></div><button class="primary account-submit" type="submit" ${disabled}>${busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}${icon('arrow')}</button></form>`;
   }
   modal(logged?'บัญชีผู้ใช้':'เข้าสู่ระบบ',`<div class="account-panel" aria-busy="${busy||!!autoSyncTask}">${content}</div>`);
   $('modalFoot').innerHTML='';
@@ -347,7 +350,7 @@ const CodeLibrary=(()=>{
   if([id,token,refresh].some(value=>typeof value!=='string'||!value||value.length>20000))throw Error('ข้อมูลเข้าสู่ระบบไม่ครบถ้วน');
   return {access_token:token,refresh_token:refresh,user:{id,email:result.email||''}};
  }
- async function request(path,{method='GET',body,auth=path==='library',retry=true,etag}={}){
+ async function request(path,{method='GET',body,auth=['library','personnel'].includes(path),retry=true,etag}={}){
   if(!defaultConfig)throw Error('ยังไม่ได้เชื่อม Firebase กรุณาให้ผู้พัฒนาตั้งค่าโปรเจกต์ก่อน');
   if(auth&&!session)throw Error('กรุณาเข้าสู่ระบบใหม่');
   const requestEpoch=authEpoch,requestOwner=session?.user.id;
@@ -359,8 +362,8 @@ const CodeLibrary=(()=>{
    url='https://securetoken.googleapis.com/v1/token?key='+encodeURIComponent(config.key);
    headers['Content-Type']='application/x-www-form-urlencoded';
    payload='grant_type=refresh_token&refresh_token='+encodeURIComponent(body.refresh_token);
-  }else if(path==='library'){
-   url=config.url+'/codeLibraries/'+encodeURIComponent(requestOwner)+'.json?auth='+encodeURIComponent(session.access_token);
+  }else if(['library','personnel'].includes(path)){
+   url=config.url+'/'+(path==='library'?'codeLibraries':'personnel')+'/'+encodeURIComponent(requestOwner)+'.json?auth='+encodeURIComponent(session.access_token);
    if(method==='GET')headers['X-Firebase-ETag']='true';
    if(etag)headers['if-match']=etag;
    if(body!==undefined)payload=JSON.stringify(body);
@@ -395,7 +398,7 @@ const CodeLibrary=(()=>{
    if(auth&&response.status===401)lockAccount();
    throw Object.assign(Error('เชื่อมต่อ Firebase ไม่สำเร็จ: '+(reason||response.status)),{retryable:response.status===429||response.status>=500});
   }
-  return path==='library'?{data:result,etag:response.headers?.get('etag')}:authResult(result);
+  return ['library','personnel'].includes(path)?{data:result,etag:response.headers?.get('etag')}:authResult(result);
  }
  async function operation(fn){
   if(busy)return;busy=true;cancelAutoSync();message='กำลังเชื่อมต่อ…';render();cloud();
@@ -417,7 +420,7 @@ const CodeLibrary=(()=>{
    const previousSession=session;
    session={...result,username,user:{...result.user,email:result.user.email||email}};
    try{switchStore('shiftplanner-codes-account:'+config.url+':'+result.user.id)}catch(e){session=previousSession;throw e}
-   rememberTabSession();await loadAccountLibrary(true);
+   rememberTabSession();notifyAccount();await loadAccountLibrary(true);
   });
  }
  async function loadAccountLibrary(showNotice=false){
@@ -444,7 +447,7 @@ const CodeLibrary=(()=>{
    if(!result?.access_token||!result.refresh_token||result.user?.id!==saved.userId)throw Error('กรุณาเข้าสู่ระบบใหม่');
    session={...result,username:saved.username};loginUsername=saved.username;
    switchStore('shiftplanner-codes-account:'+config.url+':'+result.user.id);
-   rememberTabSession();await loadAccountLibrary();
+   rememberTabSession();notifyAccount();await loadAccountLibrary();
   }catch(e){
    if(attemptEpoch===authEpoch){lockAccount();toast(e.retryable?'ยังตรวจสอบบัญชีไม่ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วเข้าสู่ระบบใหม่':'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่')}
   }finally{busy=false;render();scheduleAutoSync()}
@@ -491,6 +494,7 @@ const CodeLibrary=(()=>{
   if(busy||!session)return;
   await operation(async()=>{
    let warning='';
+   for(const fn of logoutListeners){try{await fn()}catch{warning+=' · บุคลากรยังมีข้อมูลรอส่ง เข้าสู่ระบบอีกครั้งเพื่อส่งต่อ'}}
    if(doc.dirty){
     try{if(autoSyncBlocked)throw Error('รอแก้ไขข้อมูล');await saveRemote()}
     catch{warning=' · ยังมีข้อมูลรอส่งในเครื่องนี้ เข้าสู่ระบบอีกครั้งเพื่อส่งต่อ'}
@@ -501,7 +505,7 @@ const CodeLibrary=(()=>{
   });
   if($('modal').open&&$('modalTitle').textContent==='เข้าสู่ระบบ')closeModal();
  }
- function local(){if(busy)return;if(autoSyncTask){toast('กำลังบันทึกออนไลน์ กรุณารอสักครู่');return}try{switchStore(LOCAL);session=null;forgetTabSession();render();closeModal()}catch(e){error(e)}}
+ function local(){if(busy)return;if(autoSyncTask){toast('กำลังบันทึกออนไลน์ กรุณารอสักครู่');return}try{switchStore(LOCAL);session=null;forgetTabSession();notifyAccount();render();closeModal()}catch(e){error(e)}}
  function recover(){
   if(!loadError||busy||stale){if(stale)toast('กรุณาสำรอง JSON แล้วรีเฟรชหน้าเพื่อโหลดข้อมูลจากอีกแท็บ');return}
   modal('เริ่มคลังรหัสใหม่','<p>ระบบจะดาวน์โหลดข้อมูลเดิมเป็น JSON สำหรับกู้คืน จากนั้นเริ่มคลังว่าง กรุณาเก็บไฟล์ที่ดาวน์โหลดไว้</p>','<button onclick="closeModal()">ยกเลิก</button><button onclick="CodeLibrary.confirmRecover()">ดาวน์โหลดข้อมูลเดิมและเริ่มใหม่</button>');
@@ -538,6 +542,10 @@ const CodeLibrary=(()=>{
    return action(...args);
   };
  }
+ api.account=account;
+ api.onAccount=fn=>{accountListeners.add(fn);fn(account());return()=>accountListeners.delete(fn)};
+ api.beforeLogout=fn=>{logoutListeners.add(fn);return()=>logoutListeners.delete(fn)};
+ api.personnel=options=>request('personnel',{...options,auth:true});
  api.ready=restoreTabSession(rememberedTabSession);
  return api;
 })();

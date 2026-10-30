@@ -1,0 +1,84 @@
+/* A rose notebook: roster on the paper edge, one person's details on the open page. */
+.personnel-modal{width:min(1040px,calc(100% - 32px));max-width:1040px;max-height:96dvh;background:#fffafd}
+.personnel-modal .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.personnel-modal .modal-head{padding:16px 24px;background:#fff3f8;border-color:#efd4e0}
+.personnel-modal .modal-head h2{font-size:19px;color:#853d5b}
+.personnel-modal .modal-body{padding:0;max-height:calc(96dvh - 140px)}
+.personnel-modal .modal-foot{padding:13px 22px;align-items:center;background:#fff;border-color:#efd4e0;flex-wrap:wrap}
+.personnel-intro{display:flex;align-items:center;gap:13px;padding:16px 26px;background:repeating-linear-gradient(90deg,#fff6fa 0 22px,#ffeff6 22px 44px);border-bottom:1px solid #efd9e3}
+.personnel-stamp{display:grid;place-items:center;flex:none;width:52px;height:52px;border:1px solid #e7b1c7;border-radius:18px 18px 18px 5px;color:#b93668;background:#fff}
+.personnel-intro h3{margin:0;color:#7e3150;font-size:25px;letter-spacing:-.5px}
+.personnel-intro p{margin:2px 0 0;font-size:13px;color:#91576e}
+.personnel-intro .personnel-add{margin-left:auto;background:#a92f61;border-color:#a92f61;color:#fff;font-size:14px;min-height:43px;padding:9px 16px}
+.personnel-workspace{display:grid;grid-template-columns:300px minmax(0,1fr)}
+.personnel-directory{padding:18px 12px 18px 18px;border-right:1px dashed #e8c3d4;background:#fff5f9}
+.personnel-search{display:block;margin-bottom:12px}
+.personnel-search input{width:100%;min-width:0;min-height:43px;padding:10px 13px;background:#fff;border:1px solid #dfbdcd;border-radius:12px;font-size:14px}
+#personnelList{display:grid;gap:5px;max-height:520px;overflow:auto;padding-right:5px;scrollbar-width:thin;scrollbar-color:#d6a2b9 transparent}
+.personnel-person{display:flex;align-items:center;gap:9px;min-height:68px;width:100%;text-align:left;padding:10px 9px;border:1px solid transparent;border-radius:13px;background:transparent;box-shadow:none;color:#613d4e}
+.personnel-person:hover{background:#fff;border-color:#ecd1de}
+.personnel-person.selected{background:#fff;border-color:#cf789c;box-shadow:inset 3px 0 #b63d6c}
+.personnel-person>span:nth-child(2){min-width:0;flex:1}
+.personnel-person b{display:block;font-size:14px;font-weight:650;overflow-wrap:anywhere}
+.personnel-person small{display:block;margin-top:3px;color:#886273;font-size:11px;line-height:1.5}
+.personnel-person .personnel-member-type{align-self:flex-start;color:#915b71;background:#fce6f0;padding:2px 5px;border-radius:5px;font-size:10px;flex:none}
+.personnel-avatar{width:38px;height:38px;border-radius:50%;background:#fae5ee;border:1px solid #efd0dd;color:#b26b88;display:inline-grid;place-items:center;overflow:hidden;flex:none}
+.personnel-avatar img{width:100%;height:100%;object-fit:cover}
+.personnel-avatar-large{width:88px;height:88px;border-radius:26px 26px 26px 9px;border:4px solid white;box-shadow:0 0 0 1px #e6b8cc;background:#f9e2ed}
+#personnelEditor{padding:26px 32px 24px;min-width:0;background:#fff}
+#personnelForm fieldset{border:0;margin:0;padding:0;min-width:0}
+#personnelForm fieldset:disabled{opacity:.6}
+.personnel-profile{display:flex;align-items:center;gap:20px;margin-bottom:18px}
+.personnel-photo-wrap{position:relative;flex:none}
+.personnel-photo-button{position:absolute;right:-8px;bottom:0;width:34px;height:34px;display:grid;place-items:center;border-radius:50%;color:#fff;background:#a92f61;border:3px solid #fff;cursor:pointer}
+.personnel-photo-button input{position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;border-radius:50%}
+.personnel-photo-button:focus-within{outline:3px solid #bd5180;outline-offset:3px}
+.personnel-core-label{display:inline-block;color:#9f4167;font-size:11px;padding:2px 8px;background:#fff0f6;border-radius:6px;margin-bottom:5px}
+.personnel-profile h3{font-size:23px;color:#70374e;margin:0;overflow-wrap:anywhere;line-height:1.45}
+.personnel-profile p{font-size:13px;color:#896374;margin:4px 0}
+.personnel-profile .textbtn{font-size:12px;padding:0;color:#a33160}
+.personnel-name-fields{display:grid;grid-template-columns:118px minmax(0,1fr);gap:12px}
+#personnelForm .field{font-size:13px;color:#704c5c;margin-bottom:14px;gap:6px}
+#personnelForm .field input{min-width:0;min-height:44px;font-size:15px;border-color:#e3cad5;border-radius:10px}
+.personnel-month-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #eedfe6;padding:5px 0 17px;margin:4px 0 20px;cursor:pointer}
+.personnel-month-toggle b{display:block;font-size:14px;color:#654452;font-weight:600}
+.personnel-month-toggle small{display:block;color:#896574;font-size:12px;margin-top:3px}
+.personnel-month-toggle input{width:21px;height:21px;accent-color:#b13e6d;cursor:pointer}
+.personnel-pay-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.personnel-pay-heading h4{display:flex;align-items:center;gap:7px;color:#744255;margin:0;font-size:15px}
+.personnel-pay-heading>span{font-size:12px;color:#8b6576}
+.personnel-pay-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.personnel-pay{border:1px solid #efcade;border-radius:17px;padding:14px;background:#fff4f9;min-width:0}
+.personnel-pay-dawn{background:#f0f8fa;border-color:#c5e0e5}
+.personnel-pay>label{font-size:14px;font-weight:650;color:#93355c}
+.personnel-pay-dawn>label{color:#38717c}
+.personnel-stepper{display:flex;align-items:center;gap:6px;margin:10px 0}
+.personnel-stepper input{min-width:0;width:100%;border:0;border-bottom:2px solid #dfa6c0;background:transparent;text-align:center;font-size:28px;font-weight:650;color:#8e3158;padding:2px 0;border-radius:0;font-variant-numeric:tabular-nums;appearance:textfield;-moz-appearance:textfield}
+.personnel-stepper input::-webkit-inner-spin-button,.personnel-stepper input::-webkit-outer-spin-button{appearance:none;margin:0}
+.personnel-stepper button{padding:0;flex:none;width:30px;height:36px;border-radius:9px;border-color:#ecc5d6;background:#fff;color:#a13964;font-size:18px;box-shadow:none}
+.personnel-pay-dawn .personnel-stepper input{color:#326d79;border-color:#abd0d8}
+.personnel-pay-dawn .personnel-stepper button{color:#38717c;border-color:#c5e0e5}
+.personnel-presets{display:flex;gap:5px;flex-wrap:wrap}
+.personnel-presets button{border:1px solid #efd4e0;background:#fff;padding:4px 8px;font-size:12px;color:#8e3d60;min-height:30px;border-radius:8px;box-shadow:none}
+.personnel-pay-dawn .personnel-presets button{border-color:#c5e0e5;color:#38717c}
+.personnel-pay>small{display:block;font-size:10px;color:#8b5e72;margin-top:9px}
+.personnel-pay-dawn>small{color:#4c737b}
+.personnel-pay-preview{display:flex;gap:12px;align-items:center;margin-top:14px;padding:13px 16px;background:#fff9e9;border:1px solid #efdba6;border-radius:13px;color:#946412}
+.personnel-coin{display:grid;place-items:center;width:43px;height:43px;background:#ffedb1;border:1px solid #e9c96b;border-radius:50%;flex:none}
+.personnel-pay-preview>div>span{font-size:11px;color:#8a6b30}
+.personnel-pay-preview strong{display:block;font-size:24px;line-height:1.3;font-variant-numeric:tabular-nums}
+.personnel-pay-preview strong small{font-size:12px;font-weight:500}
+.personnel-reward{font-size:11px;margin-left:auto;text-align:right;color:#9d6a17}
+.personnel-core-note{font-size:11px;color:#896574;margin:15px 0 0}
+.personnel-remove{display:flex;align-items:center;gap:6px;margin-top:19px;border:0;color:#ab3656;background:transparent;padding:5px 0;font-size:12px;box-shadow:none}
+.personnel-error{font-size:13px;color:#b52b50;margin:8px 0 0}
+.personnel-save-status{margin-right:auto;display:flex;align-items:center;gap:7px;max-width:60%;font-size:12px;color:#826071}
+.personnel-save-status .textbtn{font-size:12px;white-space:nowrap;color:#a13964}
+.personnel-status-dot{width:7px;height:7px;border-radius:50%;background:#d781a5;flex:none}
+.personnel-modal .modal-foot>button{min-height:42px;font-size:14px}
+.personnel-no-result{font-size:13px;color:#886273;padding:12px}
+.coin-pop{animation:personnel-coin-pop .45s ease-out}
+@keyframes personnel-coin-pop{0%{transform:scale(1) rotate(0)}45%{transform:translateY(-6px) scale(1.14) rotate(-12deg)}100%{transform:scale(1) rotate(0)}}
+@media(max-width:760px){.personnel-modal{width:calc(100% - 16px);max-height:96dvh}.personnel-modal .modal-body{max-height:calc(96dvh - 164px)}.personnel-intro{padding:17px 18px;gap:10px;flex-wrap:wrap}.personnel-intro h3{font-size:22px}.personnel-intro .personnel-add{font-size:12px;padding:8px 11px}.personnel-workspace{grid-template-columns:230px minmax(0,1fr)}.personnel-directory{padding:14px 9px}.personnel-person{padding:8px 6px;gap:6px}.personnel-person b{font-size:12px}.personnel-person small{font-size:10px}#personnelEditor{padding:20px 18px}.personnel-profile{gap:15px}.personnel-avatar-large{width:86px;height:86px}.personnel-profile h3{font-size:20px}.personnel-pay-grid{gap:8px}.personnel-pay{padding:11px}.personnel-stepper input{font-size:23px}.personnel-stepper button{width:25px}.personnel-presets button{padding:3px 6px}.personnel-save-status{max-width:100%;width:100%}.personnel-modal .modal-foot{gap:7px;padding:10px 16px}.personnel-reward{display:none}}
+@media(max-width:580px){.personnel-workspace{display:block}.personnel-directory{border-right:0;border-bottom:1px dashed #e4bfd0;padding:12px 14px}.personnel-search{margin-bottom:9px}#personnelList{display:flex;overflow-x:auto;padding:2px 2px 6px;max-height:none;gap:7px}.personnel-person{width:155px;flex:0 0 155px;min-height:61px;padding:8px}.personnel-person .personnel-member-type{display:none}.personnel-person small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px}.personnel-avatar{width:32px;height:32px}.personnel-avatar-large{width:86px;height:86px}.personnel-intro .personnel-add{margin-left:0;width:100%}.personnel-stamp{width:44px;height:44px}.personnel-name-fields{grid-template-columns:100px minmax(0,1fr);gap:10px}.personnel-profile{margin-bottom:21px}.personnel-pay-preview{padding:11px}.personnel-pay-preview strong{font-size:23px}.personnel-stepper input{font-size:25px}#personnelEditor{padding:21px 17px}.personnel-modal .modal-head{padding:12px 17px}.personnel-modal .modal-head h2{font-size:17px}.personnel-modal .modal-body{max-height:calc(96dvh - 164px)}}
+@media(prefers-reduced-motion:reduce){.coin-pop{animation:none}}

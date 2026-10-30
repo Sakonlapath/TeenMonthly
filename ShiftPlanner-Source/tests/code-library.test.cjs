@@ -31,6 +31,9 @@ function unzipStored(bytes){
  return parts;
 }
 async function main(){
+ const loginPattern=boot();loginPattern.run('CodeLibrary.cloud()');
+ const usernamePattern=new RegExp('^(?:'+loginPattern.$('modalBody').innerHTML.match(/pattern="([^"]+)"/)[1]+')$','v');
+ assert(usernamePattern.test('teen'));assert(usernamePattern.test('teen-2'));assert(!usernamePattern.test('te'));assert(!usernamePattern.test('teen@x'));
  const b=boot();const model=b.run('CodeCatalog');
  assert.equal(model.loginIdentity(' TEEN ',APP_PROJECT).email,APP_EMAIL);
  assert.equal(model.loginIdentity('TEEN',APP_PROJECT).username,'teen');

@@ -1,7 +1,7 @@
 
 const $=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let state=clone(SEED),history=[],currentView='codes',editing=null,choice='',toastTimer;
-const STORE='card-room-planner-v1';
+let STORE='card-room-planner-v1';
 try{let raw=localStorage.getItem(STORE);if(raw){let v=JSON.parse(raw);validateBackup(v);state=v}}catch(e){setTimeout(()=>toast('เปิดข้อมูลที่บันทึกไม่ได้ ใช้ข้อมูลตั้งต้นแทน'),300)}
 const removedLegacySample=isLegacyOctoberSample(state.months['2026-10']);
 if(removedLegacySample){checkpoint();state.months['2026-10']=freshMonth('2026-10');state.source=SEED.source}
@@ -27,7 +27,7 @@ function scheduleAudit(){return audit(state,state.selected,{distribution:true})}
 function save(){try{localStorage.setItem(STORE,JSON.stringify(state));$('saveStatus').textContent='บันทึกในเครื่องแล้ว'}catch(e){$('saveStatus').textContent='บันทึกในเครื่องไม่ได้ — กรุณาสำรองไฟล์'}}
 function checkpoint(){history.push(clone(state));if(history.length>25)history.shift()}
 function normalizeCalendarState(s){let changed=false;for(const month of Object.keys(s.months))if(normalizeCalendarDemand(s,month))changed=true;return changed}
-function changed(){normalizeCalendarState(state);save();render()}
+function changed(){if(typeof Personnel!=='undefined')Personnel.align();normalizeCalendarState(state);save();render()}
 function undo(){if(!history.length)return;state=history.pop();changed();toast('ย้อนการแก้ไขแล้ว')}
 function toast(s,fromTop=false){
  const notice=$('toast');clearTimeout(toastTimer);
@@ -132,7 +132,7 @@ function render(){
  $('fairnessDetail').innerHTML='<div style="line-height:1.8"><div><b>1. ห้องบัตร:</b> ตัวหลักรวมพฤกษาก่อน → รพีพรรณ → นวก. ตามส่วนต่างรายได้ · พยายามให้ นวก. ได้น้อยกว่าเฉลี่ยตัวหลัก 2–4 ประมาณ 500–700 บาท ไม่ใช่ข้อบังคับ · รายได้คำนวณตามเรทรายคน เป้าที่กรอกเอง วันว่าง OFF / Vac และเวรล็อกมาก่อน</div><div><b>2. หน้าตู้KIOS (ร สีฟ้า):</b> จ.–ศ. เดือนนี้ '+distribution.weekdays+' วัน · เปิดไว้ '+distribution.totalR+' เวร ÷ '+distribution.rIds.length+' คน = คนละ '+distribution.rMin+(distribution.rMax!==distribution.rMin?'–'+distribution.rMax:'')+' เวรเป็นค่าเฉลี่ย · กระจายตามปกติและสิทธิ์รับเวร · ไม่นับนายปรเมศวร์</div><div><b>3. รพ.สต. (ร สีแดง):</b> เปิดไว้ '+distribution.totalX+' เวร · ผู้รับเวร '+distribution.xIds.length+' คน · กระจายคนละ 1 เมื่อพอ ถ้าไม่พอให้ตัวหลักก่อน</div><div><b>4. เงื่อนไขคู่เวร:</b> '+pairStatusText+'</div><div><b>5. ประมาณการค่าตอบแทนเดือนนี้:</b> รวมทั้งสิ้น <b style="color:#15803d;font-size:16px">'+grandTotalPay.toLocaleString('th-TH')+' บาท</b> <button class="textbtn" onclick="staffModal()" style="margin-left:8px">แก้ไขเรทที่บุคลากร →</button></div></div>';
  view(currentView);if(typeof renderEditor==='function')renderEditor()
 }
-function modal(title,body,foot){if(typeof stopHelpReply==='function')stopHelpReply();$('modal').classList.remove('help-chat-modal');$('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modalFoot').innerHTML=foot||'<button onclick="closeModal()">ปิด</button>';if(!$('modal').open)$('modal').showModal()}
+function modal(title,body,foot){if(typeof stopHelpReply==='function')stopHelpReply();$('modal').classList.remove('help-chat-modal','personnel-modal');$('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modalFoot').innerHTML=foot||'<button onclick="closeModal()">ปิด</button>';if(!$('modal').open)$('modal').showModal()}
 function closeModal(){if(typeof stopHelpReply==='function')stopHelpReply();$('modal').close();editing=null}
 $('modal').addEventListener('click',e=>{if(e.target===$('modal')){let r=$('modal').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeModal()}});
 function cellModal(i,d){
@@ -177,6 +177,7 @@ function issuesModal(){
 function solveCapacity(){let m=activeMonth();for(let d=1;d<=daysIn(state.selected);d++){let need=CODES.reduce((s,c)=>s+m.days[d].need[c],0),available=monthPeople(state,state.selected).filter(p=>p.active&&!cell(m,p.id,d).block).length;if(need>available)return'วันที่ '+d+' ต้องการ '+need+' คน แต่มีคนไม่ติด OFF / VAC '+available+' คน'}return''}
 function focusIssue(i){let x=scheduleAudit().issues[i];if(x.p&&x.d){cellModal(state.people.findIndex(p=>p.id===x.p),x.d)}else if(x.d){dayModal(x.d)}else{view('summary');closeModal()}}
 function staffModal(){
+ if(typeof Personnel!=='undefined'&&Personnel.isReady())return Personnel.open();
  const excluded=new Set(activeMonth().excludedStaffIds||[]);
  modal('บุคลากรและเรทเงิน','<div id="staffForm">'+state.people.map((p,i)=>'<div class="staff-item" data-id="'+esc(p.id)+'"><div class="staff-heading"><b>บุคลากร '+(i+1)+'</b><label class="inline-field"><input type="checkbox" class="p-included" '+(!excluded.has(p.id)?'checked':'')+'> ลงตารางเดือนนี้</label></div><div class="staff-grid"><label class="field">ชื่อ–สกุล<input class="p-name" maxlength="100" value="'+esc(p.name)+'"></label><label class="field">ตำแหน่ง<input class="p-role" maxlength="100" value="'+esc(p.role)+'"></label></div><div class="staff-rates">'+PAY_GROUPS.map(g=>'<label class="field">เรท'+g.label+' (บาท / เวร)<input type="number" class="p-rate-'+g.id+(g.id==='card'?' p-rate':'')+'" min="0" max="10000" step="0.01" value="'+payRate(state,p.id,g.id)+'"></label>').join('')+'</div></div>').join('')+'</div><p class="help">คนที่ไม่เลือกจะไม่ปรากฏในตาราง สรุปเงิน หรือเอกสารเดือนนี้ ข้อมูลเวรเดิมยังเก็บไว้และกลับมาได้เมื่อเลือกอีกครั้ง · เรทรุ่งอรุณใช้ร่วมกันทั้งหน้าตู้KIOS และ รพ.สต. · ค่าเริ่มต้น จพ.เวช 60 / พนักงาน 50 / นวก. 80 บาท · เรทใช้กับทุกเดือน</p>','<button onclick="closeModal()">ยกเลิก</button><button class="primary" onclick="saveStaff()">บันทึกบุคลากร</button>')
 }
