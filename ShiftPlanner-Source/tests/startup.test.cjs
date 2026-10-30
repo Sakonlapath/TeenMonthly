@@ -2,16 +2,15 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
 function boot(saved=null,standalone=false,library=null){
 const elements=new Map();
-const element=id=>{if(!elements.has(id)){const classes=new Set();elements.set(id,{innerHTML:'',value:'',textContent:'',dataset:{},getBoundingClientRect(){return {width:800,height:450,left:0,top:0}},classList:{toggle(name,on){if(on===undefined)on=!classes.has(name);if(on)classes.add(name);else classes.delete(name)},add(name){classes.add(name)},remove(name){classes.delete(name)},contains:name=>classes.has(name)},setAttribute(){},addEventListener(){},querySelectorAll(){return[]},querySelector(){return null},showModal(){this.open=true},close(){this.open=false}})}return elements.get(id)};
+const element=id=>{if(!elements.has(id)){const classes=new Set();elements.set(id,{innerHTML:'',value:'',textContent:'',classList:{toggle(name,on){if(on===undefined)on=!classes.has(name);if(on)classes.add(name);else classes.delete(name)},add(name){classes.add(name)},remove(name){classes.delete(name)},contains:name=>classes.has(name)},setAttribute(){},addEventListener(){},querySelectorAll(){return[]},querySelector(){return null},showModal(){this.open=true},close(){this.open=false}})}return elements.get(id)};
 let stored=saved?JSON.stringify(saved):null;const otherStores=new Map(library?[['shiftplanner-codes-local-v1',JSON.stringify(library)]]:[]);
-const timers=new Map(),events=new Map();let timerId=0,clock=0;
-const listen=(name,fn)=>events.set(name,[...(events.get(name)||[]),fn]);
-const ctx=vm.createContext({console,TextEncoder,performance:{now:()=>clock},document:{hidden:false,getElementById:element,querySelectorAll:()=>[],addEventListener:listen},localStorage:{getItem:key=>key==='card-room-planner-v1'?stored:otherStores.get(key)??null,setItem(key,value){if(key==='card-room-planner-v1')stored=value;else otherStores.set(key,value)}},setTimeout(callback){timers.set(++timerId,callback);return timerId},clearTimeout(id){timers.delete(id)},cancelAnimationFrame(){}});
+const timers=new Map();let timerId=0;
+const ctx=vm.createContext({console,TextEncoder,document:{getElementById:element,querySelectorAll:()=>[],addEventListener(){}},localStorage:{getItem:key=>key==='card-room-planner-v1'?stored:otherStores.get(key)??null,setItem(key,value){if(key==='card-room-planner-v1')stored=value;else otherStores.set(key,value)}},setTimeout(callback){timers.set(++timerId,callback);return timerId},clearTimeout(id){timers.delete(id)},cancelAnimationFrame(){}});
 const run=x=>vm.runInContext(x,ctx);
-ctx.window={addEventListener:listen};
+ctx.window={addEventListener(){}};
 if(standalone){const html=fs.readFileSync(path.join(__dirname,'../ShiftPlanner-Standalone.html'),'utf8');for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))run(match[1])}
-else for(const file of ['core','data','export-template','exports','app','help-chat','editor','code-catalog','code-library','aim-game'])run(fs.readFileSync(path.join(__dirname,'../js/'+file+'.js'),'utf8'));
-return{ctx,run,element,stored:()=>stored,dispatch(name,event={}){for(const fn of events.get(name)||[])fn(event)},advance(ms){clock+=ms;this.flushTimers()},flushTimers(){for(const[id,callback]of [...timers]){timers.delete(id);callback()}}};
+else for(const file of ['core','data','export-template','exports','app','help-chat','editor','code-catalog','code-library'])run(fs.readFileSync(path.join(__dirname,'../js/'+file+'.js'),'utf8'));
+return{ctx,run,element,stored:()=>stored,flushTimers(){for(const[id,callback]of [...timers]){timers.delete(id);callback()}}};
 }
 for(const standalone of [false,true]){
  const codes=boot(null,standalone);assert.equal(codes.run('currentView'),'codes');codes.run('view("codes")');
@@ -49,45 +48,6 @@ for(const standalone of [false,true]){
  assert.equal(chat.run('JSON.stringify(state)'),scheduleBefore,'search and switching modes never change shifts');
 }
 console.log('PASS: disease chat searches the full active library, limits previews, opens all results, escapes notes and preserves scheduling flow in source/standalone');
-for(const standalone of [false,true]){
- const game=boot(null,standalone),schedule=game.run('JSON.stringify(state)');game.run('view("game")');
- assert(game.element('codesView').classList.contains('hidden'));assert(game.element('navGame').classList.contains('active'));
- assert(game.element('gameView').innerHTML.includes('PRUKSA'));assert.equal(game.element('aimArena').dataset.phase,'ready');
- const ids=()=>Array.from(game.element('aimTargets').innerHTML.matchAll(/data-aim-id="(\d+)"/g),m=>Number(m[1]));
- const hit=()=>game.run('AimGame.keyboardHit('+ids()[0]+')');
- game.run('AimGame.start()');assert.equal(game.element('aimArena').dataset.phase,'countdown');assert.equal(ids().length,0);
- game.advance(3000);assert.equal(game.element('aimArena').dataset.phase,'playing');assert.equal(ids().length,3);
- const first=ids()[0];game.advance(200);hit();assert.equal(game.element('aimHits').textContent,1);assert.equal(game.element('aimAccuracy').textContent,'100%');
- game.run('AimGame.keyboardHit('+first+')');assert.equal(game.element('aimHits').textContent,1,'a removed target never scores twice');
- game.run('AimGame.shoot({button:0,target:{closest:()=>null},preventDefault(){}})');assert.equal(game.element('aimMisses').textContent,1);assert.equal(game.element('aimAccuracy').textContent,'50%');
- game.run('AimGame.start();AimGame.configure("mode","reflex")');assert.equal(ids().length,3,'running settings and restart cannot reset the round');
- game.dispatch('keydown',{key:'Escape',target:{closest:()=>({})},preventDefault(){}});assert.equal(game.element('aimArena').dataset.phase,'paused','Escape pauses even with a button focused');
- game.dispatch('keydown',{code:'Space',target:{closest:()=>null},preventDefault(){}});assert.equal(game.element('aimArena').dataset.phase,'playing');
- const time=game.element('aimTime').textContent;game.run('view("codes")');assert.equal(game.element('aimArena').dataset.phase,'paused');
- game.advance(10000);game.run('view("game")');assert.equal(game.element('aimTime').textContent,time);
- game.run('AimGame.resume()');game.advance(30000);assert.equal(game.element('aimArena').dataset.phase,'finished');assert.equal(ids().length,0);
- assert(game.element('aimOverlay').innerHTML.includes('คะแนน'));assert(game.ctx.localStorage.getItem('pruksa-aim-club-v1').includes('grid:normal:30'));
- game.run('AimGame.configure("mode","reflex");AimGame.start()');game.advance(3000);assert.equal(ids().length,1);
- game.advance(1501);assert.equal(game.element('aimMisses').textContent,1);assert.equal(ids().length,0,'expired reflex targets count as a miss');
- game.advance(1000);assert.equal(ids().length,1);game.advance(120);hit();assert.equal(game.element('aimHits').textContent,1);assert.equal(game.element('aimReaction').textContent,'120 ms');
- game.dispatch('blur');assert.equal(game.element('aimArena').dataset.phase,'paused');
- game.ctx.document.hidden=true;game.run('AimGame.resume()');assert.equal(game.element('aimArena').dataset.phase,'paused');
- game.ctx.document.hidden=false;game.run('AimGame.resume();modal("test","test")');assert.equal(game.element('aimArena').dataset.phase,'paused','opening a dialog pauses the round');
- game.run('closeModal();AimGame.quit()');assert.equal(game.element('aimArena').dataset.phase,'ready');
- game.run('AimGame.configure("mode","not-a-mode");AimGame.configure("seconds",999);AimGame.start()');game.advance(3000);
- game.ctx.document.hidden=true;game.dispatch('visibilitychange');assert.equal(game.element('aimArena').dataset.phase,'paused');
- assert.equal(game.run('JSON.stringify(state)'),schedule,'the game never changes schedules');
- assert.equal(game.ctx.localStorage.getItem('shiftplanner-codes-local-v1'),null,'the game never creates or changes a code library');
-}
-{
- const game=boot();game.run('view("game");AimGame.configure("level","hard");AimGame.configure("seconds",60);AimGame.start()');
- game.advance(500);game.run('AimGame.pause()');game.advance(5000);game.run('AimGame.resume()');game.advance(2501);
- assert.equal(game.element('aimTime').textContent,'60 วิ','pausing countdown does not shorten the round');
- const id=Number(game.element('aimTargets').innerHTML.match(/data-aim-id="(\d+)"/)[1]);game.run('AimGame.keyboardHit('+id+')');
- game.ctx.localStorage.setItem=()=>{throw Error('quota exceeded')};game.advance(61000);
- assert.equal(game.element('aimArena').dataset.phase,'finished');assert(game.element('aimStorageWarning').textContent.includes('บันทึกสถิติ'));
-}
-console.log('PASS: aim game countdown, hits, misses, reflex expiry, pause/resume, isolated scores and navigation in source/standalone');
 const {ctx,run,element}=boot();
 assert.equal(run('Object.keys(activeMonth().cells).length'),0);
 assert(!element('sourceNote').textContent.includes('ต.ค.69'));
