@@ -2117,6 +2117,23 @@ const CodeLibrary=(()=>{
  let loginUsername='teen';
  let autoSyncTimer,autoSyncTask=null,autoSyncError='',autoSyncBlocked=false,autoSyncRetries=0;
  let authEpoch=0;
+ let libraryReadError='',readRetryTimer,readRetryCount=0;
+ function cancelReadRetry(){if(readRetryTimer!==undefined)clearTimeout(readRetryTimer);readRetryTimer=undefined}
+ function resetReadRetry(){cancelReadRetry();libraryReadError='';readRetryCount=0}
+ function scheduleReadRetry(){
+  cancelReadRetry();
+  if(!libraryReadError||!session||doc.dirty||loadError||readRetryCount>=3)return;
+  readRetryTimer=setTimeout(()=>{readRetryTimer=undefined;readRetryCount++;return retryLoad()},5000*2**readRetryCount);
+ }
+ async function retryLoad(){
+  if(busy||autoSyncTask||!session||doc.dirty||loadError||!libraryReadError)return;
+  cancelReadRetry();busy=true;
+  try{await loadAccountLibrary(true)}finally{
+   busy=false;render();
+   if($('modal').open&&$('modalTitle').textContent==='บัญชีผู้ใช้')cloud();
+   scheduleAutoSync();
+  }
+ }
  const pageSize=12;
  let motionPaused=false,favoritesOnly=false,speechIndex=0,speechTimer;
  const speeches=['สวัสดีคนเก่งของเค้า','สู้ๆนะไอ้อ้วงง','เค้ารักอ้วนที่สุดในโลกเลยย','มากอดหน่อย','คนเก่งของเค้า','หอมแก้มม.'];
@@ -2172,6 +2189,7 @@ const CodeLibrary=(()=>{
  function requireAccountAccess(){if(accountLocked())throw Error('กรุณาเข้าสู่ระบบก่อนเปิดหรือแก้ไขคลังบัญชี')}
  function clearAccountChat(){if(typeof clearDiseaseChat==='function')clearDiseaseChat()}
  function lockAccount(preserveTabSession=false){
+  resetReadRetry();
   if(!preserveTabSession)forgetTabSession();
   authEpoch++;session=null;cancelAutoSync();pendingClear=null;clearAccountChat();
   if($('modal').open)closeModal();
@@ -2201,6 +2219,7 @@ const CodeLibrary=(()=>{
  }
  function switchStore(next){
   if(next!==LOCAL&&(!session||next!=='shiftplanner-codes-account:'+config.url+':'+session.user.id))throw Error('กรุณาเข้าสู่ระบบก่อนเปิดคลังบัญชี');
+  resetReadRetry();
   // Re-authenticating the same owner must preserve memory-only edits when storage is full.
   if(next===store&&next!==LOCAL&&storageWarning){cancelAutoSync();autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;pendingClear=null;clearAccountChat();return}
   if(storageWarning){persist(doc);if(storageWarning)throw Error('ยังบันทึกคลังปัจจุบันในเครื่องไม่ได้ กรุณาสำรอง JSON ก่อนรีเฟรช แล้วนำเข้าไฟล์สำรองเมื่อมีพื้นที่เพียงพอ')}
@@ -2264,6 +2283,7 @@ const CodeLibrary=(()=>{
   if(accountLocked())return 'คลังบัญชีถูกล็อก · กรุณาเข้าสู่ระบบ';
   if(loadError)return loadError;
   if(storageWarning)return storageWarning;
+  if(libraryReadError)return 'ยังโหลดคลังออนไลน์ไม่สำเร็จ';
   if(store===LOCAL)return 'บันทึกเฉพาะเครื่องนี้ · '+doc.records.length+' รายการ';
   if(!session)return 'คลังบัญชีที่เคยเปิด · เข้าสู่ระบบเพื่อซิงก์ข้อมูล';
   return 'คลังบัญชี '+session.username+' · '+(autoSyncTask?'กำลังบันทึกออนไลน์…':autoSyncError?'ยังส่งออนไลน์ไม่สำเร็จ':doc.dirty?'รอบันทึกออนไลน์อัตโนมัติ':doc.revision?'บันทึกออนไลน์แล้ว':'ซิงก์อัตโนมัติพร้อมใช้งาน');
@@ -2289,6 +2309,7 @@ const CodeLibrary=(()=>{
    </div>
    <div class="code-toolbar"><p id="codeSaveStatus" class="code-save" role="status"><span class="code-save-dot" aria-hidden="true"></span>${esc(status())}</p><div class="code-main-actions"><button class="primary code-add-button" onclick="CodeLibrary.edit()" ${busy||loadError?'disabled':''}>${icon('plus')} เพิ่มรหัสใหม่</button><button class="code-data-button" onclick="CodeLibrary.files()">${icon('file')} จัดการข้อมูล</button></div></div>
    <p id="codeMessage" class="code-message" role="status">${esc(autoSyncError||message)}</p>
+   ${libraryReadError&&!doc.dirty?'<button onclick="CodeLibrary.retryLoad()" '+(busy?'disabled':'')+'>ลองโหลดคลังอีกครั้ง</button>':''}
    <div class="code-tools"><label class="field code-search"><span>ค้นหาในสมุดโค้ด</span><span class="code-search-box"><span class="code-search-icon">${icon('search')}</span><input id="codeSearch" type="search" placeholder="พิมพ์รหัส ชื่อโรค เงื่อนไข หรือโน้ต…" value="${esc(query)}" oninput="CodeLibrary.search(this.value)"></span></label>
    <fieldset class="code-kind"><legend>รายละเอียดที่ต้องการ</legend><div class="code-kind-options">${detailsKinds.map(([v,t])=>'<label class="code-kind-option code-kind-'+v+'"><input type="checkbox" name="codeKind" value="'+v+'" '+(kind.includes(v)?'checked':'')+' onchange="CodeLibrary.kind(this.value,this.checked)">'+icon(v)+'<span>'+t+'</span></label>').join('')}</div></fieldset></div>
    <div id="codeFavorites" class="code-favorites"></div>
@@ -2401,7 +2422,7 @@ const CodeLibrary=(()=>{
   const intro=`<div class="account-welcome"><span class="account-avatar">${icon('user')}<span class="kitty-bow" aria-hidden="true"></span></span><div><p class="account-kicker">${logged?'บัญชีของคุณ':'โปรแกรมพฤกษา'}</p><h3>${logged?'สวัสดี, '+esc(session.username):'ยินดีต้อนรับ'}</h3><p class="account-caption">${logged?'คลังโค้ดรหัสของคุณ':'เข้าสู่ระบบเพื่อเปิดคลังโค้ดรหัส'}</p></div>${logged?'<span class="account-signed-in">'+icon('check')+' เข้าสู่ระบบแล้ว</span>':''}</div>`;
   let content;
   if(logged){
-   const issue=loadError||storageWarning||autoSyncError;
+   const issue=loadError||storageWarning||autoSyncError||libraryReadError;
    const state=issue?'warning':busy||autoSyncTask?'working':doc.dirty?'pending':'ready';
    const heading=issue?'ยังซิงก์ข้อมูลไม่สำเร็จ':busy||autoSyncTask?'กำลังบันทึกออนไลน์…':doc.dirty?'รอบันทึกอัตโนมัติ':'เปิดซิงก์อัตโนมัติแล้ว';
    const detail=issue?(autoSyncBlocked?'ข้อมูลยังอยู่ในเครื่อง ตรวจข้อความด้านล่าง':autoSyncError?'ข้อมูลยังอยู่ในเครื่อง จะลองส่งอีกครั้งอัตโนมัติ':issue):(busy||autoSyncTask?'กรุณารอสักครู่':doc.dirty?'กำลังเตรียมส่งรายการล่าสุด':'เพิ่มหรือแก้ไขรหัส ระบบจะบันทึกขึ้นออนไลน์ให้');
@@ -2424,14 +2445,24 @@ const CodeLibrary=(()=>{
  async function request(path,{method='GET',body,auth=true,retry=true}={}){
   if(!config)throw Error('ยังไม่ได้ตั้งค่า Supabase');
   if(auth&&!session)throw Error('กรุณาเข้าสู่ระบบใหม่');
+  const requestEpoch=authEpoch,requestOwner=session?.user.id;
   const headers={apikey:config.key,'Content-Type':'application/json'};
   if(auth)headers.Authorization='Bearer '+session.access_token;
-  let response;
-  try{response=await fetch(config.url+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(25000)})}catch{throw Object.assign(Error('เชื่อมต่อไม่ได้ กรุณาตรวจอินเทอร์เน็ต ข้อมูลในเครื่องยังอยู่'),{retryable:true})}
-  let result;try{result=await response.json()}catch{result=null}
+  let response,result,timer,timedOut=false;
+  const controller=new AbortController();
+  try{
+   timer=setTimeout(()=>{timedOut=true;controller.abort()},25000);
+   response=await fetch(config.url+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal});
+   try{result=await response.json()}catch(e){if(controller.signal.aborted)throw e;if(response.ok)throw Object.assign(Error('เซิร์ฟเวอร์ส่งข้อมูลไม่ครบหรือรูปแบบไม่ถูกต้อง กรุณาลองโหลดอีกครั้ง'),{invalidResponse:true});result=null}
+  }catch(e){
+   const detail=timedOut||e.name==='TimeoutError'?'เซิร์ฟเวอร์ Supabase ไม่ตอบกลับภายใน 25 วินาที':e.invalidResponse?e.message:'ติดต่อบริการ Supabase ไม่สำเร็จ อาจเป็นที่บริการหรือเส้นทางเชื่อมต่อ';
+   throw Object.assign(Error(detail+' ข้อมูลในเครื่องยังอยู่'),{retryable:true});
+  }finally{clearTimeout(timer)}
+  if(auth&&(requestEpoch!==authEpoch||session?.user.id!==requestOwner))throw Error('บัญชีถูกเปลี่ยน กรุณาเข้าสู่ระบบใหม่');
   if(response.status===401&&auth&&retry&&session.refresh_token){
    try{
     const refreshed=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token},auth:false});
+    if(requestEpoch!==authEpoch||session?.user.id!==requestOwner)throw Error('กรุณาเข้าสู่ระบบใหม่');
     if(!refreshed?.access_token||refreshed.user?.id!==session.user.id)throw Error('กรุณาเข้าสู่ระบบใหม่');
     session={...refreshed,username:session.username};rememberTabSession();return request(path,{method,body,auth,retry:false});
    }catch(e){lockAccount();throw e}
@@ -2471,11 +2502,17 @@ const CodeLibrary=(()=>{
  async function loadAccountLibrary(showNotice=false){
   if(loadError){message='เข้าสู่ระบบแล้ว · '+loadError;return}
   if(doc.dirty){message='เข้าสู่ระบบแล้ว กำลังเตรียมส่งข้อมูลที่ยังไม่ได้ส่งจากเครื่องนี้อัตโนมัติ';return}
+  const target=store,epoch=authEpoch;
   try{
    const remote=await readRemote();
+   if(epoch!==authEpoch||store!==target||!session)return;
    if(remote){persist(remote);page=1;if(showNotice)toast('เข้าสู่ระบบแล้ว โหลดคลัง '+doc.records.length+' รหัสเรียบร้อย',true)}
-   message='';
-  }catch(e){message=session?'เข้าสู่ระบบแล้ว แต่โหลดคลังไม่ได้: '+e.message:'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่'}
+   resetReadRetry();message='';
+  }catch(e){
+   if(epoch!==authEpoch||store!==target||!session)return;
+   libraryReadError=e.message;message='เข้าสู่ระบบแล้ว แต่โหลดคลังไม่ได้: '+e.message;
+   if(e.retryable)scheduleReadRetry();
+  }
  }
  async function restoreTabSession(saved){
   if(!saved)return;
@@ -2516,7 +2553,7 @@ const CodeLibrary=(()=>{
    const next=await readRemote();
    if(!next){message='ยังไม่มีข้อมูลออนไลน์ กรุณารวมรหัสจากคลังในเครื่องหรือเพิ่มรหัส แล้วส่งขึ้นออนไลน์';return}
    if(!backup())throw Error('สำรอง JSON ไม่สำเร็จ จึงยังไม่แทนที่ข้อมูลในเครื่อง');
-   persist(next);autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;page=1;message='โหลดข้อมูลออนไลน์แล้ว '+doc.records.length+' รหัส';toast(message);
+   persist(next);resetReadRetry();autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;page=1;message='โหลดข้อมูลออนไลน์แล้ว '+doc.records.length+' รหัส';toast(message);
   });
  }
  function copyLocal(){
@@ -2560,10 +2597,10 @@ const CodeLibrary=(()=>{
   e.preventDefault();goToPage(page+(e.key==='ArrowRight'?1:-1));
  });
  window.addEventListener('beforeunload',e=>{if(storageWarning||busy||autoSyncTask||(session&&doc.dirty)){e.preventDefault();e.returnValue=''}});
- window.addEventListener('online',()=>scheduleAutoSync(0));
+ window.addEventListener('online',()=>{scheduleAutoSync(0);if(libraryReadError)return retryLoad()});
  window.addEventListener('pagehide',()=>lockAccount(true));
  window.addEventListener('pageshow',e=>{if(e.persisted)lockAccount()});
- window.addEventListener('focus',()=>{if(doc.dirty)scheduleAutoSync(0)});
+ window.addEventListener('focus',()=>{if(doc.dirty)scheduleAutoSync(0);else if(libraryReadError)return retryLoad()});
  window.addEventListener('storage',e=>{
   if(e.key!==store)return;
   // A different tab must not be silently overwritten by this tab's stale copy.
@@ -2571,7 +2608,7 @@ const CodeLibrary=(()=>{
   if(currentView==='codes')render();
  });
  if(currentView==='codes')render();else renderAccount();
- const api={render,edit,save,remove,confirmRemove,files,backup,excel,importFile,cloud,togglePassword,login,push,pullPrompt,pull,copyLocal,logout,local,recover,confirmRecover,motion,nextSpeech,suspend,detail,favorite,goToPage,removeAll,confirmRemoveAll,cancelRemoveAll,lookup,openSearch,
+ const api={render,edit,save,remove,confirmRemove,files,backup,excel,importFile,cloud,togglePassword,login,push,pullPrompt,pull,copyLocal,logout,local,recover,confirmRecover,motion,nextSpeech,suspend,detail,favorite,goToPage,removeAll,confirmRemoveAll,cancelRemoveAll,lookup,openSearch,retryLoad,
   favorites(){favoritesOnly=!favoritesOnly;page=1;renderFavorites();renderResults()},search(v){query=v;page=1;renderResults()},kind(v,checked){if(!['conditions','procedures','note'].includes(v))return;kind=kind.filter(k=>k!==v);if(checked)kind.push(v);page=1;renderResults()},category(v){if(v==='')category=[];else if(/^[A-Z]$/.test(v))category=category.includes(v)?category.filter(c=>c!==v):[...category,v].sort();else return;page=1;render()},page(delta){goToPage(page+delta)},clearSearch(){category=[];query='';kind=[];favoritesOnly=false;page=1;render()}};
  // Guard entry points as well as writes, including export, chat search and stale dialog buttons.
  for(const name of ['edit','save','remove','confirmRemove','files','backup','excel','importFile','push','pullPrompt','pull','copyLocal','recover','confirmRecover','detail','favorite','goToPage','removeAll','confirmRemoveAll','lookup','openSearch','favorites','search','kind','category','page','clearSearch']){

@@ -9,7 +9,7 @@ function boot({storage=new Map(),tabStorage=new Map(),navigationType='navigate',
  const elements=new Map(),events={},downloads=[],messages=[],timers=new Map();let timerId=0;
  const $=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',textContent:'',value:'',open:false,attributes:{},classList:{toggle(){}},setAttribute(name,value){this.attributes[name]=value},focus(){},reportValidity(){return true}});return elements.get(id)};
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const ctx=vm.createContext({console,TextEncoder,atob,AbortSignal,fetch,$,esc,currentView:'codes',document:{hidden:false},setTimeout(fn,delay){timers.set(++timerId,{fn,delay});return timerId},clearTimeout(id){timers.delete(id)},
+ const ctx=vm.createContext({console,TextEncoder,atob,AbortSignal,AbortController,fetch,$,esc,currentView:'codes',document:{hidden:false},setTimeout(fn,delay){timers.set(++timerId,{fn,delay});return timerId},clearTimeout(id){timers.delete(id)},
   window:{addEventListener(name,fn){events[name]=fn}},localStorage:{getItem:k=>storage.get(k)??null,setItem(k,v){storage.set(k,v)}},
   sessionStorage:{getItem:k=>tabStorage.get(k)??null,setItem(k,v){tabStorage.set(k,v)},removeItem(k){tabStorage.delete(k)}},performance:{getEntriesByType:()=>[{type:navigationType}]},
   toast:x=>messages.push(x),download:(content,name,type)=>downloads.push({content,name,type}),
@@ -342,6 +342,46 @@ async function main(){
  authForm(offlineLogin);await offlineLogin.run('CodeLibrary.login()');
  assert(offlineLogin.$('accountControls').innerHTML.includes('teen'));assert(offlineLogin.$('modalBody').innerHTML.includes('โหลดคลังไม่ได้'));
  assert.equal(JSON.parse(offlineLogin.storage.get(authKey)).records[0].code,'K01');
+ // A failed initial read is retried without uploading or treating the cache as current.
+ assert(offlineLogin.$('codesView').innerHTML.includes('ลองโหลดคลังอีกครั้ง'));
+ assert(offlineLogin.$('modalBody').innerHTML.includes('account-sync-warning'));
+ assert(!offlineLogin.$('modalBody').innerHTML.includes('กรุณาตรวจอินเทอร์เน็ต'));
+ const recovered=boot({fetch:authFetch});authForm(recovered);await recovered.run('CodeLibrary.login()');
+ const readRetry=[...recovered.timers].find(([,timer])=>timer.delay===5000);assert(readRetry);
+ readFailure=false;recovered.timers.delete(readRetry[0]);await readRetry[1].fn();
+ assert.equal(JSON.parse(recovered.storage.get(authKey)).records[0].code,'Z99');
+ assert(!recovered.$('codesView').innerHTML.includes('ลองโหลดคลังอีกครั้ง'));
+ assert.equal(authWrites,0);
+ // Old browsers without AbortSignal.timeout still load; a real timeout has a specific message.
+ const compatible=boot({fetch:authFetch});compatible.ctx.AbortSignal={};authForm(compatible);await compatible.run('CodeLibrary.login()');
+ assert.equal(JSON.parse(compatible.storage.get(authKey)).records.length,1);
+ const timeoutClient=boot({fetch:async(url,options)=>url.includes('/auth/')?reply(200,loginResult):new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'}))))});
+ authForm(timeoutClient);const timeoutLogin=timeoutClient.run('CodeLibrary.login()');
+ for(let i=0;i<10;i++)await Promise.resolve();
+ const deadline=[...timeoutClient.timers].find(([,timer])=>timer.delay===25000);assert(deadline);deadline[1].fn();await timeoutLogin;
+ assert(timeoutClient.$('modalBody').innerHTML.includes('25 วินาที'));
+ assert.equal(timeoutClient.storage.get(authKey),undefined);
+ // Retry is bounded and never replaces edits made after an unsuccessful read.
+ let retryReads=0;
+ const unavailable=boot({fetch:async url=>{if(url.includes('/auth/'))return reply(200,loginResult);retryReads++;throw Error('unavailable')}});
+ authForm(unavailable);await unavailable.run('CodeLibrary.login()');
+ for(const delay of [5000,10000,20000]){
+  const pending=[...unavailable.timers].find(([,timer])=>timer.delay===delay);assert(pending);
+  unavailable.timers.delete(pending[0]);await pending[1].fn();
+ }
+ assert.equal(retryReads,4);
+ assert(![...unavailable.timers.values()].some(timer=>[5000,10000,20000].includes(timer.delay)));
+ unavailable.form(row('P88'));unavailable.run('CodeLibrary.save()');
+ await unavailable.run('CodeLibrary.retryLoad()');assert.equal(retryReads,4);
+ assert.equal(JSON.parse(unavailable.storage.get(authKey)).records[0].code,'P88');
+ unavailable.events.pagehide();assert(![...unavailable.timers.values()].some(timer=>[5000,10000,20000].includes(timer.delay)));
+ // A delayed read after the tab is locked must never persist or reveal private data.
+ let finishRead;const delayedRead=boot({fetch:async url=>url.includes('/auth/')?reply(200,loginResult):new Promise(resolve=>{finishRead=resolve})});
+ authForm(delayedRead);const delayedLogin=delayedRead.run('CodeLibrary.login()');
+ for(let i=0;i<10;i++)await Promise.resolve();
+ assert(finishRead);delayedRead.events.pagehide();finishRead(reply(200,[{records:[row('X99')],revision:1}]));await delayedLogin;
+ assert.equal(delayedRead.storage.get(authKey),undefined);
+ assert(delayedRead.$('codesView').innerHTML.includes('code-account-locked'));
  // Failed refresh expires the header login without discarding cached edits.
  offlineLogin.ctx.fetch=async(url)=>url.includes('grant_type=refresh_token')?reply(400,{}):reply(401,{});
  await offlineLogin.run('CodeLibrary.push()');assert(offlineLogin.$('accountControls').innerHTML.includes('header-login-button'));
