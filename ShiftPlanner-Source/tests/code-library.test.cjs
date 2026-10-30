@@ -353,6 +353,79 @@ async function main(){
  assert(invalidLogin.$('cloudMessage').textContent.includes('6'));
  const unconfirmed=boot({fetch:async()=>reply(400,{error_code:'email_not_confirmed',msg:'Confirm internal identity first'})});
  authForm(unconfirmed);await unconfirmed.run('CodeLibrary.login()');assert(unconfirmed.$('modalBody').innerHTML.includes('บัญชียังไม่พร้อมใช้งาน'));assert(!unconfirmed.$('modalBody').innerHTML.includes('@'));
+ // Two independent browsers share the same account without a manual upload.
+ let syncCloud={revision:0,records:[]},syncOffline=false,holdUpload=false,releaseUpload;
+ const syncFetch=async(url,options)=>{
+  if(url.includes('/auth/v1/token'))return reply(200,loginResult);
+  if(url.includes('/auth/v1/logout'))return reply(200,null);
+  if(syncOffline)throw Error('offline');
+  if(url.includes('/rpc/save_code_library')){
+   if(holdUpload)await new Promise(resolve=>{releaseUpload=resolve});
+   const body=JSON.parse(options.body);
+   if(body.expected_revision!==syncCloud.revision)return reply(409,{code:'40001'});
+   syncCloud={revision:syncCloud.revision+1,records:body.entries};return reply(200,syncCloud.revision);
+  }
+  return reply(200,syncCloud.revision?[JSON.parse(JSON.stringify(syncCloud))]:[]);
+ };
+ const tickSync=async(client,delay=600)=>{
+  const timer=[...client.timers].find(([,value])=>value.delay===delay);
+  assert(timer,'expected pending sync timer at '+delay+'ms');client.timers.delete(timer[0]);await timer[1].fn();
+ };
+ const device1=boot({fetch:syncFetch});authForm(device1);await device1.run('CodeLibrary.login()');
+ device1.form(row('A11'));device1.run('CodeLibrary.save("")');
+ assert.equal(syncCloud.records.length,0);assert.equal(JSON.parse(device1.storage.get(authKey)).dirty,true);
+ await tickSync(device1);
+ assert.equal(syncCloud.records[0].code,'A11');assert.equal(JSON.parse(device1.storage.get(authKey)).dirty,false);
+ assert.equal(device1.$('modal').open,false,'background save must not open the account dialog');
+ const device2=boot({fetch:syncFetch});authForm(device2);await device2.run('CodeLibrary.login()');
+ assert.equal(JSON.parse(device2.storage.get(authKey)).records[0].code,'A11');
+ // An in-flight acknowledgement must not mark newer edits as saved or interrupt an open editor.
+ holdUpload=true;device1.form(row('B12'));device1.run('CodeLibrary.save("")');
+ const pendingUpload=tickSync(device1);
+ assert.equal(typeof releaseUpload,'function');
+ device1.form(row('C13'));device1.run('CodeLibrary.save("");CodeLibrary.edit()');
+ device1.$('codeDisease').value='unsaved editor text';device1.$('codeSearch').value='active search';
+ holdUpload=false;releaseUpload();await pendingUpload;
+ assert.equal(syncCloud.records.length,2);assert.equal(JSON.parse(device1.storage.get(authKey)).records.length,3);
+ assert.equal(JSON.parse(device1.storage.get(authKey)).dirty,true);
+ assert.equal(device1.$('modalTitle').textContent,'เพิ่มโค้ดรหัส');assert.equal(device1.$('codeDisease').value,'unsaved editor text');
+ assert.equal(device1.$('codeSearch').value,'active search');
+ await tickSync(device1);assert.equal(syncCloud.records.length,3);assert.equal(JSON.parse(device1.storage.get(authKey)).dirty,false);
+ // Offline changes remain queued; reconnect retries without user intervention.
+ syncOffline=true;device1.form(row('D14'));device1.run('CodeLibrary.save("")');await tickSync(device1);
+ assert.equal(syncCloud.records.length,3);assert.equal(JSON.parse(device1.storage.get(authKey)).dirty,true);
+ assert([...device1.timers.values()].some(timer=>timer.delay===3000));
+ let pendingWarning=false;device1.events.beforeunload({preventDefault(){pendingWarning=true}});assert(pendingWarning);
+ syncOffline=false;device1.events.online();await tickSync(device1,0);
+ assert.equal(syncCloud.records.length,4);assert.equal(JSON.parse(device1.storage.get(authKey)).dirty,false);
+ // Logging out immediately after editing flushes the pending save first.
+ device1.form(row('E15'));device1.run('CodeLibrary.save("")');await device1.run('CodeLibrary.logout()');
+ assert.equal(syncCloud.records.length,5);assert.equal(JSON.parse(device1.storage.get(authKey)).dirty,false);
+ assert(![...device1.timers.values()].some(timer=>timer.delay===600));
+ // A stale second device cannot overwrite newer online records and must stop retrying a conflict.
+ device2.form(row('A11',{note:'stale device edit'}));device2.run('CodeLibrary.save('+JSON.stringify(device2.idFor('A11'))+')');
+ const beforeConflict=JSON.stringify(syncCloud);await tickSync(device2);
+ assert.equal(JSON.stringify(syncCloud),beforeConflict);assert.equal(JSON.parse(device2.storage.get(authKey)).dirty,true);
+ assert(device2.$('codeMessage').textContent.includes('เครื่องอื่น'));
+ device2.events.online();device2.events.focus();assert(![...device2.timers.values()].some(timer=>timer.delay!==7000));
+ const device3=boot({fetch:syncFetch});authForm(device3);await device3.run('CodeLibrary.login()');
+ assert.equal(JSON.parse(device3.storage.get(authKey)).records.length,5);
+ device3.run('CodeLibrary.favorite('+JSON.stringify(device3.idFor('A11'))+')');await tickSync(device3);
+ assert.equal(syncCloud.records.find(r=>r.code==='A11').favorite,true);
+ device3.run('CodeLibrary.confirmRemove('+JSON.stringify(device3.idFor('E15'))+')');await tickSync(device3);
+ assert(!syncCloud.records.some(r=>r.code==='E15'));
+ device3.run('CodeLibrary.backup();CodeLibrary.removeAll()');await tickSync(device3);
+ assert.equal(syncCloud.records.length,0,'bulk deletion also syncs');
+ const device4=boot({fetch:syncFetch});authForm(device4);await device4.run('CodeLibrary.login()');
+ assert.equal(JSON.parse(device4.storage.get(authKey)).records.length,0);
+ // Previously unsent account data resumes on login; separate local-only records stay separate.
+ syncCloud={revision:0,records:[]};
+ const resumed=boot({fetch:syncFetch,storage:new Map([[authKey,serialized([row('P91')])],[LOCAL,serialized([row('L01')])]])});
+ authForm(resumed);await resumed.run('CodeLibrary.login()');await tickSync(resumed);
+ assert.equal(syncCloud.records.length,1);assert.equal(syncCloud.records[0].code,'P91');
+ assert.equal(JSON.parse(resumed.storage.get(LOCAL)).records[0].code,'L01');
+ assert.equal(JSON.parse(resumed.storage.get(authKey)).dirty,false);
+ console.log('PASS: automatic cross-device saves, concurrent edits, reconnect retry, logout flush, conflict protection and resumed pending data');
  const sql=fs.readFileSync(path.join(root,'supabase/code-library.sql'),'utf8');
  assert(sql.includes('enable row level security'));assert(sql.includes('security invoker'));assert(sql.includes("errcode = '40001'"));assert(sql.includes('and revision = expected_revision'));
  console.log('PASS: duplicate-code entries, independent editing/deletion, stable legacy migration, duplicate-safe JSON/Excel/cloud roundtrip, filtering, escaped notes, tab conflicts, recovery, cloud auth and offline preservation');

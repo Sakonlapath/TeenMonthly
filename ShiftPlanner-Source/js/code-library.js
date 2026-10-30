@@ -9,6 +9,7 @@ const CodeLibrary=(()=>{
  let store=LOCAL,doc=empty(),session=null,loadError='',rawBackup='',storageWarning='',stale=false,busy=false,message='',category=[],query='',kind=[],page=1;
  const backedUpRecords=new Map();let pendingClear=null;
  let loginUsername='teen';
+ let autoSyncTimer,autoSyncTask=null,autoSyncError='',autoSyncBlocked=false,autoSyncRetries=0;
  const pageSize=12;
  let motionPaused=false,favoritesOnly=false,speechIndex=0,speechTimer;
  const speeches=['สวัสดีคนเก่งของเค้า','สู้ๆนะไอ้อ้วงง','เค้ารักอ้วนที่สุดในโลกเลยย','มากอดหน่อย','คนเก่งของเค้า','หอมแก้มม.'];
@@ -64,9 +65,50 @@ const CodeLibrary=(()=>{
  }
  function switchStore(next){
   if(storageWarning){persist(doc);if(storageWarning)throw Error('ยังบันทึกคลังปัจจุบันในเครื่องไม่ได้ กรุณาสำรอง JSON ก่อนรีเฟรช แล้วนำเข้าไฟล์สำรองเมื่อมีพื้นที่เพียงพอ')}
+  cancelAutoSync();autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;
   store=next;doc=read(store);try{localStorage.setItem(ACTIVE,store)}catch{}page=1;category=[];query='';kind=[];favoritesOnly=false;message='';pendingClear=null;
  }
- function commit(rows){if(busy)throw Error('รอการเชื่อมต่อให้เสร็จก่อน');persist({...doc,records:rows,dirty:true});page=1;render()}
+ function commit(rows){if(busy)throw Error('รอการเชื่อมต่อให้เสร็จก่อน');persist({...doc,records:rows,dirty:true});page=1;message='';scheduleAutoSync();render()}
+ function cancelAutoSync(){if(autoSyncTimer!==undefined){clearTimeout(autoSyncTimer);autoSyncTimer=undefined}}
+ function canAutoSync(){return session&&store==='shiftplanner-codes-account:'+config.url+':'+session.user.id&&doc.dirty&&!loadError&&!autoSyncBlocked}
+ function scheduleAutoSync(delay=600){
+  cancelAutoSync();
+  if(!canAutoSync()||busy||autoSyncTask)return;
+  autoSyncTimer=setTimeout(()=>{autoSyncTimer=undefined;return autoSave()},delay);
+ }
+ function refreshSyncUI(){
+  const label=$('codeSaveStatus');if(label)label.innerHTML='<span class="code-save-dot" aria-hidden="true"></span>'+esc(status());
+  const notice=$('codeMessage');if(notice)notice.textContent=autoSyncError||message;
+  renderAccount();
+  if($('modal').open&&$('modalTitle').textContent==='บัญชีผู้ใช้')cloud();
+ }
+ async function saveRemote(){
+  if(!session)throw Error('กรุณาเข้าสู่ระบบใหม่เพื่อส่งข้อมูลที่ค้างไว้');
+  if(loadError)throw Error(loadError);
+  const target=store,owner=session.user.id,next=CodeCatalog.records(doc.records),snapshot=JSON.stringify(next);
+  const revision=await request('/rest/v1/rpc/save_code_library',{method:'POST',body:{expected_revision:doc.revision,entries:next}});
+  if(!Number.isSafeInteger(revision)||revision<1)throw Error('รูปแบบรุ่นข้อมูลออนไลน์ไม่ถูกต้อง');
+  if(store!==target||session?.user.id!==owner)throw Error('บัญชีถูกเปลี่ยน ข้อมูลในเครื่องยังรอส่ง');
+  // Edits made during a background upload belong to the next revision, not this acknowledgement.
+  persist({...doc,revision,dirty:JSON.stringify(doc.records)!==snapshot});
+  autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;
+  return next.length;
+ }
+ function autoSave(){
+  if(autoSyncTask)return autoSyncTask;
+  if(busy||!canAutoSync())return Promise.resolve();
+  cancelAutoSync();autoSyncError='';
+  autoSyncTask=(async()=>{
+   try{await saveRemote();message=''}
+   catch(e){
+    autoSyncError=e.message||String(e);autoSyncBlocked=!e.retryable;autoSyncRetries++;
+   }
+  })().finally(()=>{
+   autoSyncTask=null;refreshSyncUI();
+   scheduleAutoSync(autoSyncRetries?Math.min(30000,3000*2**Math.min(autoSyncRetries-1,4)):600);
+  });
+  refreshSyncUI();return autoSyncTask;
+ }
  function error(e){message=e.message||String(e);toast(message);if(currentView==='codes')render()}
  function filtered(){return CodeCatalog.filter(doc.records,category,query,kind).filter(r=>!favoritesOnly||r.favorite)}
  function lookup(value){
@@ -83,7 +125,8 @@ const CodeLibrary=(()=>{
   if(loadError)return loadError;
   if(storageWarning)return storageWarning;
   if(store===LOCAL)return 'บันทึกเฉพาะเครื่องนี้ · '+doc.records.length+' รายการ';
-  return (session?'คลังบัญชี '+session.username:'คลังบัญชีที่เคยเปิด · ยังไม่ได้เข้าสู่ระบบ')+' · '+(doc.dirty?'มีข้อมูลรอส่งออนไลน์':'ข้อมูลที่โหลดไว้ รุ่น '+doc.revision);
+  if(!session)return 'คลังบัญชีที่เคยเปิด · เข้าสู่ระบบเพื่อซิงก์ข้อมูล';
+  return 'คลังบัญชี '+session.username+' · '+(autoSyncTask?'กำลังบันทึกออนไลน์…':autoSyncError?'ยังส่งออนไลน์ไม่สำเร็จ':doc.dirty?'รอบันทึกออนไลน์อัตโนมัติ':doc.revision?'บันทึกออนไลน์แล้ว':'ซิงก์อัตโนมัติพร้อมใช้งาน');
  }
  function renderAccount(){
   const host=$('accountControls');if(!host)return;
@@ -100,7 +143,7 @@ const CodeLibrary=(()=>{
     <div class="kitty-mascot"><div class="kitty-speech"><span id="kittySpeechText">${esc(speeches[speechIndex])}</span>${icon('heart','code-heart')}</div><div id="kittyCharacter" class="kitty-character${motionPaused?' is-paused':''}" role="img" aria-label="Hello Kitty โบกมือทักทาย"><img class="kitty-character-body" src="assets/kitty/hello-kitty-cutout.png" alt="" width="1024" height="1024"><img class="kitty-character-arm" src="assets/kitty/hello-kitty-cutout.png" alt="" width="1024" height="1024"><span class="kitty-wave-mark" aria-hidden="true">${icon('heart','code-heart')}</span></div><button id="kittyMotion" class="kitty-motion" onclick="CodeLibrary.motion()" aria-pressed="${motionPaused}" aria-label="${motionPaused?'เล่นแอนิเมชันและข้อความคิตตี้':'พักแอนิเมชันและข้อความคิตตี้'}">${icon(motionPaused?'play':'pause')}</button></div>
    </div>
    <div class="code-toolbar"><p id="codeSaveStatus" class="code-save" role="status"><span class="code-save-dot" aria-hidden="true"></span>${esc(status())}</p><div class="code-main-actions"><button class="primary code-add-button" onclick="CodeLibrary.edit()" ${busy||loadError?'disabled':''}>${icon('plus')} เพิ่มรหัสใหม่</button><button class="code-data-button" onclick="CodeLibrary.files()">${icon('file')} จัดการข้อมูล</button></div></div>
-   <p id="codeMessage" class="code-message" role="status">${esc(message)}</p>
+   <p id="codeMessage" class="code-message" role="status">${esc(autoSyncError||message)}</p>
    <div class="code-tools"><label class="field code-search"><span>ค้นหาในสมุดโค้ด</span><span class="code-search-box"><span class="code-search-icon">${icon('search')}</span><input id="codeSearch" type="search" placeholder="พิมพ์รหัส ชื่อโรค เงื่อนไข หรือโน้ต…" value="${esc(query)}" oninput="CodeLibrary.search(this.value)"></span></label>
    <fieldset class="code-kind"><legend>รายละเอียดที่ต้องการ</legend><div class="code-kind-options">${detailsKinds.map(([v,t])=>'<label class="code-kind-option code-kind-'+v+'"><input type="checkbox" name="codeKind" value="'+v+'" '+(kind.includes(v)?'checked':'')+' onchange="CodeLibrary.kind(this.value,this.checked)">'+icon(v)+'<span>'+t+'</span></label>').join('')}</div></fieldset></div>
    <div id="codeFavorites" class="code-favorites"></div>
@@ -164,7 +207,7 @@ const CodeLibrary=(()=>{
  function files(){pendingClear=null;modal('จัดการสมุดโค้ดของฉัน',`<div class="code-file-menu">
   <section class="code-file-section"><h3>ส่งออก Excel</h3><div class="code-export-row"><label class="field">รายการที่ต้องการ<select id="codeExportScope"><option value="all">ทั้งคลัง · ${doc.records.length} รายการ</option><option value="filtered">ผลค้นหาปัจจุบัน · ${filtered().length} รายการ</option></select></label><button class="primary" onclick="CodeLibrary.excel(document.getElementById('codeExportScope').value==='filtered')">ดาวน์โหลด Excel</button></div></section>
   <section class="code-file-section"><h3>สำรองและนำกลับมาใช้</h3><div class="code-file-actions"><button onclick="CodeLibrary.backup()">สำรอง JSON</button><button onclick="document.getElementById('codeImport').click()" ${busy||loadError?'disabled':''}>นำเข้า JSON</button></div><p id="codeBackupStatus" role="status">${backupStatus()}</p></section>
-  <section class="code-file-section code-sync-section"><h3>${icon('cloud')} ซิงก์ข้ามเครื่อง</h3><p>${esc(status())}</p><p>การบันทึกในเบราว์เซอร์ยังไม่ใช่การส่งขึ้นออนไลน์ ต้องเข้าสู่ระบบแล้วกดส่งหรือโหลดข้อมูล คลังออนไลน์แยกตามบัญชี คนละบัญชีจะยังไม่เห็นคลังร่วมกัน</p><button onclick="CodeLibrary.cloud()" ${busy?'disabled':''}>เข้าสู่ระบบ / ส่งและโหลดข้อมูล</button></section>
+  <section class="code-file-section code-sync-section"><h3>${icon('cloud')} ซิงก์ข้ามเครื่อง</h3><p>${esc(status())}</p><p>เมื่อเข้าสู่ระบบ การแก้ไขจะส่งขึ้นออนไลน์อัตโนมัติ ใช้บัญชีเดิมบนอีกเครื่องเพื่อโหลดข้อมูล คนละบัญชีมีคลังแยกกัน</p><button onclick="CodeLibrary.cloud()" ${busy?'disabled':''}>${session?'บัญชีและสถานะการซิงก์':'เข้าสู่ระบบ'}</button></section>
   <section class="code-file-section code-delete-section"><h3>ลบโค้ดรหัสทั้งหมด</h3><p>ลบทั้งคลังที่เปิดอยู่ ${doc.records.length} รายการ รวมหมวดที่ไม่ได้เลือก โดยไม่ลบตารางเวร</p><button class="code-danger-button" onclick="CodeLibrary.removeAll()" ${busy||loadError||!doc.records.length?'disabled':''}>${icon('trash')} ลบโค้ดรหัสทั้งหมด</button></section>
   ${store!==LOCAL?'<button class="code-local-link" onclick="CodeLibrary.local()" '+(busy?'disabled':'')+'>เปิดสมุดที่บันทึกในเครื่อง</button>':''}<input id="codeImport" type="file" accept=".json,application/json" class="hidden" onchange="CodeLibrary.importFile(this)">${loadError?'<p class="code-message">'+esc(loadError)+'</p><button onclick="CodeLibrary.recover()">ดาวน์โหลดข้อมูลเดิมและเริ่มคลังใหม่</button>':''}</div>`)}
  function backup(){
@@ -189,7 +232,7 @@ const CodeLibrary=(()=>{
   if(expected.store!==store||expected.records!==JSON.stringify(doc.records)){error(Error('ข้อมูลเปลี่ยนระหว่างรอยืนยัน กรุณากดลบทั้งหมดใหม่'));return}
   try{
    const count=doc.records.length;
-   persist({...doc,records:[],dirty:true});backedUpRecords.delete(store);
+   persist({...doc,records:[],dirty:true});backedUpRecords.delete(store);scheduleAutoSync();
    category=[];query='';kind=[];favoritesOnly=false;page=1;message='';render();closeModal();
    toast('ลบโค้ดรหัสแล้ว '+count+' รายการ'+(storageWarning?' · '+storageWarning:''));
   }catch(e){error(e)}
@@ -209,19 +252,19 @@ const CodeLibrary=(()=>{
  function cloud(){
   const logged=!!session;
   const disabled=busy?'disabled':'';
-  const notice=`<p id="cloudMessage" class="code-message account-notice" role="status" aria-live="polite">${esc(message)}</p>`;
+  const notice=`<p id="cloudMessage" class="code-message account-notice" role="status" aria-live="polite">${esc(autoSyncError||message)}</p>`;
   const intro=`<div class="account-welcome"><span class="account-avatar">${icon('user')}<span class="kitty-bow" aria-hidden="true"></span></span><div><p class="account-kicker">${logged?'บัญชีของคุณ':'โปรแกรมพฤกษา'}</p><h3>${logged?'สวัสดี, '+esc(session.username):'ยินดีต้อนรับ'}</h3><p class="account-caption">${logged?'คลังโค้ดรหัสของคุณ':'เข้าสู่ระบบเพื่อเปิดคลังโค้ดรหัส'}</p></div>${logged?'<span class="account-signed-in">'+icon('check')+' เข้าสู่ระบบแล้ว</span>':''}</div>`;
   let content;
   if(logged){
-   const issue=loadError||storageWarning;
-   const state=issue?'warning':busy?'working':doc.dirty?'pending':'ready';
-   const heading=issue?'ตรวจสอบข้อมูลในเครื่อง':busy?'กำลังเชื่อมต่อ…':doc.dirty?'มีข้อมูลรอส่งออนไลน์':doc.revision?'ไม่มีข้อมูลรอส่ง':'พร้อมใช้งาน';
-   const detail=issue|| (busy?'กรุณารอสักครู่':doc.dirty?'กดบันทึกเพื่อเปิดรายการล่าสุดบนเครื่องอื่น':'เพิ่มหรือแก้ไขรหัส แล้วกดบันทึกขึ้นออนไลน์');
-   content=`${intro}<div class="account-stats"><div><span>รหัสในคลังนี้</span><strong>${doc.records.length}<small>รายการ</small></strong></div><div><span>${icon('star')} รายการโปรด</span><strong>${doc.records.filter(r=>r.favorite).length}<small>รายการ</small></strong></div></div><section class="account-sync-status account-sync-${state}" aria-label="สถานะข้อมูล"><span class="account-status-icon">${icon(issue?'conditions':busy?'cloud':doc.dirty?'upload':'check')}</span><div><h4>${heading}</h4><p>${esc(detail)}</p></div></section>${notice}<div class="account-actions"><button class="primary account-upload" onclick="CodeLibrary.push()" ${busy||loadError?'disabled':''}>${icon('upload')}<span>${busy?'กำลังเชื่อมต่อ…':'บันทึกขึ้นออนไลน์'}</span></button><div class="account-secondary-actions"><button onclick="CodeLibrary.pullPrompt()" ${busy||loadError?'disabled':''}><span class="account-action-icon">${icon('download')}</span><span><b>โหลดจากออนไลน์</b><small>ใช้ข้อมูลที่บันทึกไว้บนออนไลน์</small></span>${icon('arrow','account-action-arrow')}</button><button onclick="CodeLibrary.copyLocal()" ${busy||loadError?'disabled':''}><span class="account-action-icon">${icon('plus')}</span><span><b>รวมรหัสจากในเครื่อง</b><small>นำมาเพิ่มในคลังบัญชีนี้</small></span>${icon('arrow','account-action-arrow')}</button></div></div><div class="account-session-actions"><button class="account-signout" onclick="CodeLibrary.logout()" ${disabled}>${icon('logout')} ออกจากระบบ</button></div>`;
+   const issue=loadError||storageWarning||autoSyncError;
+   const state=issue?'warning':busy||autoSyncTask?'working':doc.dirty?'pending':'ready';
+   const heading=issue?'ยังซิงก์ข้อมูลไม่สำเร็จ':busy||autoSyncTask?'กำลังบันทึกออนไลน์…':doc.dirty?'รอบันทึกอัตโนมัติ':'เปิดซิงก์อัตโนมัติแล้ว';
+   const detail=issue?(autoSyncBlocked?'ข้อมูลยังอยู่ในเครื่อง ตรวจข้อความด้านล่าง':autoSyncError?'ข้อมูลยังอยู่ในเครื่อง จะลองส่งอีกครั้งอัตโนมัติ':issue):(busy||autoSyncTask?'กรุณารอสักครู่':doc.dirty?'กำลังเตรียมส่งรายการล่าสุด':'เพิ่มหรือแก้ไขรหัส ระบบจะบันทึกขึ้นออนไลน์ให้');
+   content=`${intro}<div class="account-stats"><div><span>รหัสในคลังนี้</span><strong>${doc.records.length}<small>รายการ</small></strong></div><div><span>${icon('star')} รายการโปรด</span><strong>${doc.records.filter(r=>r.favorite).length}<small>รายการ</small></strong></div></div><section class="account-sync-status account-sync-${state}" aria-label="สถานะข้อมูล"><span class="account-status-icon">${icon(issue?'conditions':busy||autoSyncTask?'cloud':doc.dirty?'upload':'check')}</span><div><h4>${heading}</h4><p>${esc(detail)}</p></div></section>${notice}<div class="account-actions"><button class="primary account-upload" onclick="CodeLibrary.push()" ${busy||autoSyncTask||loadError?'disabled':''}>${icon('upload')}<span>${busy?'กำลังเชื่อมต่อ…':'บันทึกขึ้นออนไลน์'}</span></button><div class="account-secondary-actions"><button onclick="CodeLibrary.pullPrompt()" ${busy||autoSyncTask||loadError?'disabled':''}><span class="account-action-icon">${icon('download')}</span><span><b>โหลดจากออนไลน์</b><small>ใช้ข้อมูลที่บันทึกไว้บนออนไลน์</small></span>${icon('arrow','account-action-arrow')}</button><button onclick="CodeLibrary.copyLocal()" ${busy||autoSyncTask||loadError?'disabled':''}><span class="account-action-icon">${icon('plus')}</span><span><b>รวมรหัสจากในเครื่อง</b><small>นำมาเพิ่มในคลังบัญชีนี้</small></span>${icon('arrow','account-action-arrow')}</button></div></div><div class="account-session-actions"><button class="account-signout" onclick="CodeLibrary.logout()" ${disabled}>${icon('logout')} ออกจากระบบ</button></div>`;
   }else{
    content=`${intro}${notice}<form id="cloudForm" class="code-form account-login-form" onsubmit="event.preventDefault();CodeLibrary.login()"><label class="field">ชื่อผู้ใช้<input id="cloudUsername" type="text" required minlength="3" maxlength="32" pattern="[A-Za-z][A-Za-z0-9._-]{2,31}" value="${esc(loginUsername)}" placeholder="teen" autocomplete="username" autocapitalize="none" spellcheck="false" ${disabled}></label><div class="field"><label for="cloudPassword">รหัสผ่าน</label><div class="account-password"><input id="cloudPassword" type="password" required minlength="6" autocomplete="current-password" placeholder="กรอกรหัสผ่าน" ${disabled}><button id="cloudPasswordToggle" class="account-password-toggle" type="button" onclick="CodeLibrary.togglePassword()" aria-controls="cloudPassword" aria-label="แสดงรหัสผ่าน" aria-pressed="false" title="แสดงรหัสผ่าน" ${disabled}>${icon('eye')}</button></div></div><button class="primary account-submit" type="submit" ${disabled}>${busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}${icon('arrow')}</button></form>`;
   }
-  modal(logged?'บัญชีผู้ใช้':'เข้าสู่ระบบ',`<div class="account-panel" aria-busy="${busy}">${content}</div>`);
+  modal(logged?'บัญชีผู้ใช้':'เข้าสู่ระบบ',`<div class="account-panel" aria-busy="${busy||!!autoSyncTask}">${content}</div>`);
   $('modalFoot').innerHTML='';
  }
  function togglePassword(){
@@ -239,7 +282,7 @@ const CodeLibrary=(()=>{
   const headers={apikey:config.key,'Content-Type':'application/json'};
   if(auth)headers.Authorization='Bearer '+session.access_token;
   let response;
-  try{response=await fetch(config.url+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(25000)})}catch{throw Error('เชื่อมต่อไม่ได้ กรุณาตรวจอินเทอร์เน็ตและสถานะโปรเจกต์ ข้อมูลในเครื่องยังอยู่')}
+  try{response=await fetch(config.url+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(25000)})}catch{throw Object.assign(Error('เชื่อมต่อไม่ได้ กรุณาตรวจอินเทอร์เน็ต ข้อมูลในเครื่องยังอยู่'),{retryable:true})}
   let result;try{result=await response.json()}catch{result=null}
   if(response.status===401&&auth&&retry&&session.refresh_token){
    try{
@@ -249,18 +292,18 @@ const CodeLibrary=(()=>{
    }catch(e){session=null;renderAccount();throw e}
   }
   if(!response.ok){
-   if(result?.code==='40001')throw Error('ข้อมูลออนไลน์เปลี่ยนจากเครื่องอื่น กรุณาสำรอง JSON ในเครื่อง แล้วโหลดข้อมูลออนไลน์ก่อนรวมรายการและส่งใหม่');
+   if(result?.code==='40001')throw Object.assign(Error('ข้อมูลออนไลน์เปลี่ยนจากเครื่องอื่น กรุณาสำรอง JSON ในเครื่อง แล้วโหลดข้อมูลออนไลน์ก่อนรวมรายการและส่งใหม่'),{code:'40001'});
    if(result?.error_code==='email_not_confirmed')throw Error('บัญชียังไม่พร้อมใช้งาน กรุณาให้ผู้พัฒนายืนยันบัญชีใน Supabase ก่อน');
    if(response.status===401||result?.error_code==='invalid_credentials'){if(auth){session=null;renderAccount()}throw Error('เข้าสู่ระบบไม่ได้ Username หรือ Password ไม่ตรงกับบัญชีที่ตั้งไว้ หากยังไม่ได้สร้างบัญชี ให้ผู้ดูแลตั้งค่าบัญชีก่อน')}
    if(result?.code==='PGRST202'||result?.code==='42P01')throw Error('ยังไม่พบตารางหรือฟังก์ชัน กรุณารัน supabase/code-library.sql ใน SQL Editor ก่อน');
-   throw Error('เชื่อมต่อไม่สำเร็จ: '+(result?.msg||result?.message||result?.error_description||response.status));
+   throw Object.assign(Error('เชื่อมต่อไม่สำเร็จ: '+(result?.msg||result?.message||result?.error_description||response.status)),{retryable:response.status===429||response.status>=500});
   }
   return result;
  }
  async function operation(fn){
-  if(busy)return;busy=true;message='กำลังเชื่อมต่อ…';render();cloud();
-  try{await fn()}catch(e){message=e.message;toast(message)}
-  finally{busy=false;render();if($('modal').open&&['เข้าสู่ระบบ','บัญชีผู้ใช้'].includes($('modalTitle').textContent))cloud()}
+  if(busy)return;busy=true;cancelAutoSync();message='กำลังเชื่อมต่อ…';render();cloud();
+  try{if(autoSyncTask)await autoSyncTask;await fn()}catch(e){message=e.message;if(e.code==='40001'){autoSyncBlocked=true;autoSyncError=e.message}toast(message)}
+  finally{busy=false;render();if($('modal').open&&['เข้าสู่ระบบ','บัญชีผู้ใช้'].includes($('modalTitle').textContent))cloud();scheduleAutoSync()}
  }
  async function login(){
   if(busy||!$('cloudForm').reportValidity())return;
@@ -274,9 +317,9 @@ const CodeLibrary=(()=>{
    if(typeof result?.user?.id!=='string'||!result.user.id||!result.access_token)throw Error('ข้อมูลเข้าสู่ระบบไม่ครบถ้วน');
    switchStore('shiftplanner-codes-account:'+config.url+':'+result.user.id);
    session={...result,username,user:{...result.user,email:result.user.email||email}};
-   // Read only on login; preserve unsent edits and the separate local library.
+   // Load a clean account immediately; resume pending uploads after login using the saved revision.
    if(loadError){message='เข้าสู่ระบบแล้ว · '+loadError;return}
-   if(doc.dirty){message='เข้าสู่ระบบแล้ว มีข้อมูลแก้ไขในเครื่องที่ยังไม่ได้ส่ง กรุณาเลือกส่งขึ้นออนไลน์ หรือสำรองแล้วโหลดข้อมูล';return}
+   if(doc.dirty){message='เข้าสู่ระบบแล้ว กำลังเตรียมส่งข้อมูลที่ยังไม่ได้ส่งจากเครื่องนี้อัตโนมัติ';return}
    try{
     const remote=await readRemote();
     if(remote){persist(remote);page=1;message='เข้าสู่ระบบแล้ว โหลดคลัง '+doc.records.length+' รหัสเรียบร้อย'}
@@ -285,6 +328,7 @@ const CodeLibrary=(()=>{
   });
  }
  async function readRemote(){
+  if(!session)throw Error('กรุณาเข้าสู่ระบบใหม่');
   const result=await request('/rest/v1/code_libraries?select=records,revision&owner_id=eq.'+encodeURIComponent(session.user.id));
   if(!Array.isArray(result)||result.length>1)throw Error('รูปแบบข้อมูลออนไลน์ไม่ถูกต้อง');
   return result.length?CodeCatalog.document({version:1,records:result[0].records,revision:result[0].revision,dirty:false}):null;
@@ -292,11 +336,7 @@ const CodeLibrary=(()=>{
  async function push(){
   if(!session)return;
   await operation(async()=>{
-   if(loadError)throw Error(loadError);
-   const next=CodeCatalog.records(doc.records);
-   const revision=await request('/rest/v1/rpc/save_code_library',{method:'POST',body:{expected_revision:doc.revision,entries:next}});
-   if(!Number.isSafeInteger(revision)||revision<1)throw Error('รูปแบบรุ่นข้อมูลออนไลน์ไม่ถูกต้อง');
-   persist({...doc,revision,dirty:false});message='ส่งข้อมูลขึ้นออนไลน์แล้ว '+next.length+' รหัส · รุ่น '+revision;toast(message);
+   const count=await saveRemote();message='บันทึกออนไลน์แล้ว '+count+' รหัส';toast(message);
   });
  }
  function pullPrompt(){
@@ -312,21 +352,25 @@ const CodeLibrary=(()=>{
    const next=await readRemote();
    if(!next){message='ยังไม่มีข้อมูลออนไลน์ กรุณารวมรหัสจากคลังในเครื่องหรือเพิ่มรหัส แล้วส่งขึ้นออนไลน์';return}
    if(!backup())throw Error('สำรอง JSON ไม่สำเร็จ จึงยังไม่แทนที่ข้อมูลในเครื่อง');
-   persist(next);page=1;message='โหลดข้อมูลออนไลน์แล้ว '+doc.records.length+' รหัส · รุ่น '+doc.revision;toast(message);
+   persist(next);autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;page=1;message='โหลดข้อมูลออนไลน์แล้ว '+doc.records.length+' รหัส';toast(message);
   });
  }
  function copyLocal(){
   if(busy||!session)return;
   try{
    const raw=localStorage.getItem(LOCAL),incoming=raw?CodeCatalog.document(JSON.parse(raw)).records:[];
-   commit(CodeCatalog.merge(doc.records,incoming));message='รวมรหัสในเครื่องแล้ว กรุณากดส่งข้อมูลขึ้นออนไลน์';cloud();
+   commit(CodeCatalog.merge(doc.records,incoming));message='รวมรหัสในเครื่องแล้ว รอบันทึกออนไลน์อัตโนมัติ';cloud();
   }catch(e){message=e.message;cloud()}
  }
  async function logout(){
   if(busy||!session)return;
   await operation(async()=>{
    let warning='';
-   try{await request('/auth/v1/logout?scope=local',{method:'POST'})}catch(e){warning=' · ยืนยันการออกจากระบบกับเซิร์ฟเวอร์ไม่ได้ กรุณาเข้าสู่ระบบใหม่เมื่อเชื่อมต่อได้'}
+   if(doc.dirty){
+    try{if(autoSyncBlocked)throw Error('รอแก้ไขข้อมูล');await saveRemote()}
+    catch{warning=' · ยังมีข้อมูลรอส่งในเครื่องนี้ เข้าสู่ระบบอีกครั้งเพื่อส่งต่อ'}
+   }
+   try{await request('/auth/v1/logout?scope=local',{method:'POST'})}catch(e){warning+=' · ยืนยันการออกจากระบบกับเซิร์ฟเวอร์ไม่ได้ กรุณาเข้าสู่ระบบใหม่เมื่อเชื่อมต่อได้'}
    finally{
     session=null;loginUsername='teen';
     try{switchStore(LOCAL)}catch(e){warning+=' · '+e.message}
@@ -335,7 +379,7 @@ const CodeLibrary=(()=>{
   });
   if($('modal').open&&$('modalTitle').textContent==='เข้าสู่ระบบ')closeModal();
  }
- function local(){if(busy)return;try{switchStore(LOCAL);session=null;render();closeModal()}catch(e){error(e)}}
+ function local(){if(busy)return;if(autoSyncTask){toast('กำลังบันทึกออนไลน์ กรุณารอสักครู่');return}try{switchStore(LOCAL);session=null;render();closeModal()}catch(e){error(e)}}
  function recover(){
   if(!loadError||busy||stale){if(stale)toast('กรุณาสำรอง JSON แล้วรีเฟรชหน้าเพื่อโหลดข้อมูลจากอีกแท็บ');return}
   modal('เริ่มคลังรหัสใหม่','<p>ระบบจะดาวน์โหลดข้อมูลเดิมเป็น JSON สำหรับกู้คืน จากนั้นเริ่มคลังว่าง กรุณาเก็บไฟล์ที่ดาวน์โหลดไว้</p>','<button onclick="closeModal()">ยกเลิก</button><button onclick="CodeLibrary.confirmRecover()">ดาวน์โหลดข้อมูลเดิมและเริ่มใหม่</button>');
@@ -351,7 +395,9 @@ const CodeLibrary=(()=>{
   if(e.target?.isContentEditable||e.target?.closest?.('input,textarea,select,[contenteditable],[role="textbox"],[role="combobox"],[role="slider"]'))return;
   e.preventDefault();goToPage(page+(e.key==='ArrowRight'?1:-1));
  });
- window.addEventListener('beforeunload',e=>{if(storageWarning||busy){e.preventDefault();e.returnValue=''}});
+ window.addEventListener('beforeunload',e=>{if(storageWarning||busy||autoSyncTask||(session&&doc.dirty)){e.preventDefault();e.returnValue=''}});
+ window.addEventListener('online',()=>scheduleAutoSync(0));
+ window.addEventListener('focus',()=>{if(doc.dirty)scheduleAutoSync(0)});
  window.addEventListener('storage',e=>{
   if(e.key!==store)return;
   // A different tab must not be silently overwritten by this tab's stale copy.
