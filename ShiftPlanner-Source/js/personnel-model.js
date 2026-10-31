@@ -39,7 +39,7 @@ const PersonnelModel=(()=>{
  function apply(s,raw){
   const profile=validate(raw),ids=new Set(profile.people.map(p=>p.id));
   // Keep metadata needed by old cells/targets, but never schedule removed legacy entries again.
-  const retained=s.people.filter(p=>!ids.has(p.id)&&(s.quotas?.[p.id]!==undefined||s.mainStaffIds?.includes(p.id)||s.pairExclusions?.some(pair=>pair.includes(p.id))||Object.values(s.months).some(m=>Object.keys(m.cells).some(k=>k.startsWith(p.id+'|'))||m.excludedStaffIds?.includes(p.id)||m.quotas?.[p.id]!==undefined||m.categoryQuotas?.[p.id])));
+  const retained=s.people.filter(p=>!ids.has(p.id)&&(s.quotas?.[p.id]!==undefined||s.mainStaffIds?.includes(p.id)||s.pairExclusions?.some(pair=>pair.includes(p.id))||Object.values(s.months).some(m=>Object.keys(m.cells).some(k=>k.startsWith(p.id+'|'))||m.excludedStaffIds?.includes(p.id)||m.quotas?.[p.id]!==undefined||m.categoryQuotas?.[p.id]||m.rosterSnapshot?.some(v=>v.id===p.id)||m.settlement?.people?.some(v=>v.id===p.id))));
   s.people=[...copy(profile.people),...retained.map(p=>({...copy(p),removedFrom:p.removedFrom||'1900-01'}))];
   s.payRates={...Object.fromEntries(retained.map(p=>[p.id,s.payRates[p.id]])),...copy(profile.payRates)};
   return s;

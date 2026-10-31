@@ -13,6 +13,7 @@ const CodeLibrary=(()=>{
  let autoSyncTimer,autoSyncTask=null,autoSyncError='',autoSyncBlocked=false,autoSyncRetries=0;
  let authEpoch=0;
  let libraryReadError='',readRetryTimer,readRetryCount=0;
+ let libraryHistory=[];
  function cancelReadRetry(){if(readRetryTimer!==undefined)clearTimeout(readRetryTimer);readRetryTimer=undefined}
  function resetReadRetry(){cancelReadRetry();libraryReadError='';readRetryCount=0}
  function scheduleReadRetry(){
@@ -89,7 +90,7 @@ const CodeLibrary=(()=>{
  function lockAccount(preserveTabSession=false){
   resetReadRetry();
   if(!preserveTabSession)forgetTabSession();
-  authEpoch++;session=null;cancelAutoSync();pendingClear=null;clearAccountChat();notifyAccount();
+  authEpoch++;session=null;libraryHistory=[];cancelAutoSync();pendingClear=null;clearAccountChat();notifyAccount();
   if($('modal').open)closeModal();
   $('modalBody').innerHTML='';$('modalFoot').innerHTML='';
   message='กรุณาเข้าสู่ระบบใหม่เพื่อเปิดคลังบัญชี';render();
@@ -122,7 +123,7 @@ const CodeLibrary=(()=>{
   if(next===store&&next!==LOCAL&&storageWarning){cancelAutoSync();autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;pendingClear=null;clearAccountChat();return}
   if(storageWarning){persist(doc);if(storageWarning)throw Error('ยังบันทึกคลังปัจจุบันในเครื่องไม่ได้ กรุณาสำรอง JSON ก่อนรีเฟรช แล้วนำเข้าไฟล์สำรองเมื่อมีพื้นที่เพียงพอ')}
   cancelAutoSync();autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;clearAccountChat();
-  store=next;doc=read(store);try{localStorage.setItem(ACTIVE,store)}catch{}page=1;category=[];query='';kind=[];favoritesOnly=false;message='';pendingClear=null;
+  store=next;doc=read(store);libraryHistory=[];try{localStorage.setItem(ACTIVE,store)}catch{}page=1;category=[];query='';kind=[];favoritesOnly=false;message='';pendingClear=null;
  }
  function commit(rows){if(busy)throw Error('รอการเชื่อมต่อให้เสร็จก่อน');persist({...doc,records:rows,dirty:true});page=1;message='';scheduleAutoSync();render()}
  function cancelAutoSync(){if(autoSyncTimer!==undefined){clearTimeout(autoSyncTimer);autoSyncTimer=undefined}}
@@ -146,11 +147,14 @@ const CodeLibrary=(()=>{
   if((online?.revision||0)!==expected)throw conflictError();
   if(!remote.etag)throw Error('Firebase ไม่ส่งรุ่นข้อมูลกลับมา จึงยังไม่บันทึกเพื่อป้องกันข้อมูลทับกัน');
   const revision=expected+1;
-  await request('library',{method:'PUT',body:{version:1,revision,recordsJson:JSON.stringify(next)},etag:remote.etag});
+  const history=libraryHistory.slice();
+  if(JSON.stringify(online?.records||[])!==snapshot)history.push({id:'codes-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2),at:Date.now(),revision:expected,records:online?.records||[]});
+  while(history.length>20||history.length&&JSON.stringify(history).length>4500000)history.shift();
+  await request('library',{method:'PUT',body:{version:1,revision,recordsJson:JSON.stringify(next),historyJson:JSON.stringify(history)},etag:remote.etag});
   if(!Number.isSafeInteger(revision)||revision<1)throw Error('รูปแบบรุ่นข้อมูลออนไลน์ไม่ถูกต้อง');
   if(store!==target||session?.user.id!==owner)throw Error('บัญชีถูกเปลี่ยน ข้อมูลในเครื่องยังรอส่ง');
   // Edits made during a background upload belong to the next revision, not this acknowledgement.
-  persist({...doc,revision,dirty:JSON.stringify(doc.records)!==snapshot});
+  persist({...doc,revision,dirty:JSON.stringify(doc.records)!==snapshot});libraryHistory=history;
   autoSyncError='';autoSyncBlocked=false;autoSyncRetries=0;
   return next.length;
  }
@@ -275,6 +279,7 @@ const CodeLibrary=(()=>{
  function files(){pendingClear=null;modal('จัดการสมุดโค้ดของฉัน',`<div class="code-file-menu">
   <section class="code-file-section"><h3>ส่งออก Excel</h3><div class="code-export-row"><label class="field">รายการที่ต้องการ<select id="codeExportScope"><option value="all">ทั้งคลัง · ${doc.records.length} รายการ</option><option value="filtered">ผลค้นหาปัจจุบัน · ${filtered().length} รายการ</option></select></label><button class="primary" onclick="CodeLibrary.excel(document.getElementById('codeExportScope').value==='filtered')">ดาวน์โหลด Excel</button></div></section>
   <section class="code-file-section"><h3>สำรองและนำกลับมาใช้</h3><div class="code-file-actions"><button onclick="CodeLibrary.backup()">สำรอง JSON</button><button onclick="document.getElementById('codeImport').click()" ${busy||loadError?'disabled':''}>นำเข้า JSON</button></div><p id="codeBackupStatus" role="status">${backupStatus()}</p></section>
+  ${session?'<section class="code-file-section"><h3>สำรองอัตโนมัติ</h3><p>เก็บคลังออนไลน์ก่อนแก้ไขสูงสุด 20 รุ่น รวมก่อนลบรหัส</p><button onclick="CodeLibrary.history()">ประวัติ / กู้คืนคลังรหัส</button></section>':''}
   <section class="code-file-section code-sync-section"><h3>${icon('cloud')} ซิงก์ข้ามเครื่อง</h3><p>${esc(status())}</p><p>เมื่อเข้าสู่ระบบ การแก้ไขจะส่งขึ้นออนไลน์อัตโนมัติ ใช้บัญชีเดิมบนอีกเครื่องเพื่อโหลดข้อมูล คนละบัญชีมีคลังแยกกัน</p><button onclick="CodeLibrary.cloud()" ${busy?'disabled':''}>${session?'บัญชีและสถานะการซิงก์':'เข้าสู่ระบบ'}</button></section>
   <section class="code-file-section code-delete-section"><h3>ลบโค้ดรหัสทั้งหมด</h3><p>ลบทั้งคลังที่เปิดอยู่ ${doc.records.length} รายการ รวมหมวดที่ไม่ได้เลือก โดยไม่ลบตารางเวร</p><button class="code-danger-button" onclick="CodeLibrary.removeAll()" ${busy||loadError||!doc.records.length?'disabled':''}>${icon('trash')} ลบโค้ดรหัสทั้งหมด</button></section>
   ${store!==LOCAL?'<button class="code-local-link" onclick="CodeLibrary.local()" '+(busy?'disabled':'')+'>เปิดสมุดที่บันทึกในเครื่อง</button>':''}<input id="codeImport" type="file" accept=".json,application/json" class="hidden" onchange="CodeLibrary.importFile(this)">${loadError?'<p class="code-message">'+esc(loadError)+'</p><button onclick="CodeLibrary.recover()">ดาวน์โหลดข้อมูลเดิมและเริ่มคลังใหม่</button>':''}</div>`)}
@@ -350,7 +355,7 @@ const CodeLibrary=(()=>{
   if([id,token,refresh].some(value=>typeof value!=='string'||!value||value.length>20000))throw Error('ข้อมูลเข้าสู่ระบบไม่ครบถ้วน');
   return {access_token:token,refresh_token:refresh,user:{id,email:result.email||''}};
  }
- async function request(path,{method='GET',body,auth=['library','personnel'].includes(path),retry=true,etag}={}){
+ async function request(path,{method='GET',body,auth=['library','personnel','planner'].includes(path),retry=true,etag,month}={}){
   if(!defaultConfig)throw Error('ยังไม่ได้เชื่อม Firebase กรุณาให้ผู้พัฒนาตั้งค่าโปรเจกต์ก่อน');
   if(auth&&!session)throw Error('กรุณาเข้าสู่ระบบใหม่');
   const requestEpoch=authEpoch,requestOwner=session?.user.id;
@@ -362,8 +367,9 @@ const CodeLibrary=(()=>{
    url='https://securetoken.googleapis.com/v1/token?key='+encodeURIComponent(config.key);
    headers['Content-Type']='application/x-www-form-urlencoded';
    payload='grant_type=refresh_token&refresh_token='+encodeURIComponent(body.refresh_token);
-  }else if(['library','personnel'].includes(path)){
-   url=config.url+'/'+(path==='library'?'codeLibraries':'personnel')+'/'+encodeURIComponent(requestOwner)+'.json?auth='+encodeURIComponent(session.access_token);
+  }else if(['library','personnel','planner'].includes(path)){
+   if(path==='planner'&&month!==undefined&&!/^(19\d{2}|20\d{2}|21\d{2}|2200)-(0[1-9]|1[0-2])$/.test(month))throw Error('เดือนออนไลน์ไม่ถูกต้อง');
+   url=config.url+'/'+({library:'codeLibraries',personnel:'personnel',planner:'planners'}[path])+'/'+encodeURIComponent(requestOwner)+(path==='planner'&&month!==undefined?'/'+month:'')+'.json?auth='+encodeURIComponent(session.access_token);
    if(method==='GET')headers['X-Firebase-ETag']='true';
    if(etag)headers['if-match']=etag;
    if(body!==undefined)payload=JSON.stringify(body);
@@ -385,7 +391,7 @@ const CodeLibrary=(()=>{
     const refreshed=await request('refresh',{method:'POST',body:{refresh_token:session.refresh_token}});
     if(requestEpoch!==authEpoch||session?.user.id!==requestOwner)throw Error('กรุณาเข้าสู่ระบบใหม่');
     if(refreshed.user.id!==session.user.id)throw Error('กรุณาเข้าสู่ระบบใหม่');
-    session={...refreshed,username:session.username};rememberTabSession();return request(path,{method,body,auth,retry:false,etag});
+    session={...refreshed,username:session.username};rememberTabSession();return request(path,{method,body,auth,retry:false,etag,month});
    }catch(e){if(requestEpoch===authEpoch&&!e.retryable)lockAccount();throw e}
   }
   if(!response.ok){
@@ -398,7 +404,7 @@ const CodeLibrary=(()=>{
    if(auth&&response.status===401)lockAccount();
    throw Object.assign(Error('เชื่อมต่อ Firebase ไม่สำเร็จ: '+(reason||response.status)),{retryable:response.status===429||response.status>=500});
   }
-  return ['library','personnel'].includes(path)?{data:result,etag:response.headers?.get('etag')}:authResult(result);
+  return ['library','personnel','planner'].includes(path)?{data:result,etag:response.headers?.get('etag')}:authResult(result);
  }
  async function operation(fn){
   if(busy)return;busy=true;cancelAutoSync();message='กำลังเชื่อมต่อ…';render();cloud();
@@ -453,9 +459,22 @@ const CodeLibrary=(()=>{
   }finally{busy=false;render();scheduleAutoSync()}
  }
  function remoteDocument(data){
-  if(data===null)return null;
+  if(data===null){libraryHistory=[];return null}
   if(!data||data.version!==1||typeof data.recordsJson!=='string')throw Error('รูปแบบข้อมูล Firebase ไม่ถูกต้อง');
+  const entries=data.historyJson===undefined?[]:JSON.parse(data.historyJson);if(!Array.isArray(entries)||entries.length>20)throw Error('ประวัติคลังออนไลน์ไม่ถูกต้อง');
+  libraryHistory=entries.map(v=>{if(!v||typeof v.id!=='string'||!v.id||v.id.length>100||!Number.isFinite(v.at)||v.at<=0||!Number.isSafeInteger(v.revision)||v.revision<0)throw Error('ประวัติคลังออนไลน์ไม่ถูกต้อง');return {...v,records:CodeCatalog.records(v.records)}});
   return CodeCatalog.document({version:1,records:JSON.parse(data.recordsJson),revision:data.revision,dirty:false});
+ }
+ async function showHistory(){
+  if(!session)return cloud();if(busy)return;const target=store,epoch=authEpoch;
+  try{if(autoSyncTask)await autoSyncTask;const result=await request('library');if(epoch!==authEpoch||target!==store)return;remoteDocument(result.data);
+   modal('ประวัติคลังโค้ดรหัส','<p class="help">กู้คืนแล้วจะเก็บคลังปัจจุบันไว้เป็นรุ่นสำรองอีกครั้ง</p><div class="planner-history-list">'+[...libraryHistory].reverse().map(v=>'<article><div><b>คลัง '+v.records.length+' รหัส</b><small>'+esc(new Date(v.at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))+'</small></div><button onclick="CodeLibrary.restoreHistory('+esc(JSON.stringify(v.id))+')">กู้คืนรุ่นนี้</button></article>').join('')+(!libraryHistory.length?'<p>ยังไม่มีรุ่นก่อนหน้า ระบบจะสำรองเมื่อแก้ไขคลังออนไลน์</p>':'')+'</div>');
+  }catch(e){error(e)}
+ }
+ async function restoreHistory(id){
+  if(!session||busy)return;const entry=libraryHistory.find(v=>v.id===id);if(!entry)return;const records=CodeCatalog.records(entry.records);
+  if(!confirm('กู้คืนคลัง '+records.length+' รหัส? จะเก็บคลังปัจจุบันไว้ในประวัติ'))return;
+  await operation(async()=>{if(doc.dirty)await saveRemote();persist({...doc,records,dirty:true});page=1;closeModal();await saveRemote();toast('กู้คืนคลังโค้ดรหัสแล้ว',true)});
  }
  async function readRemote(){
   if(!session)throw Error('กรุณาเข้าสู่ระบบใหม่');
@@ -546,6 +565,8 @@ const CodeLibrary=(()=>{
  api.onAccount=fn=>{accountListeners.add(fn);fn(account());return()=>accountListeners.delete(fn)};
  api.beforeLogout=fn=>{logoutListeners.add(fn);return()=>logoutListeners.delete(fn)};
  api.personnel=options=>request('personnel',{...options,auth:true});
+ api.history=showHistory;api.restoreHistory=restoreHistory;
+ api.planner=(month,options={})=>{if(month===undefined&&options.method&&options.method!=='GET')throw Error('กรุณาระบุเดือนก่อนส่งตาราง');return request('planner',{...options,auth:true,month})};
  api.ready=restoreTabSession(rememberedTabSession);
  return api;
 })();

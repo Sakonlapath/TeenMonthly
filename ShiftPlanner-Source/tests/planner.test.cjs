@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),c=require('../js/core'),p=require('../js/planner-model');
+const seed=vm.runInNewContext(fs.readFileSync(require.resolve('../js/data.js'),'utf8')+';JSON.parse(JSON.stringify(SEED))');
+const s=c.clone(seed),month=s.selected;s.months[month].cells['1|1']={code:'N',block:'',locked:true};
+let data=p.capture(s,month);assert.equal(data.month.cells['1|1'].code,'N');assert(!JSON.stringify(data).includes('data:image/'),'photos do not multiply across backups');
+let closed=p.close(data,1000);p.apply(s,closed);const beforePay=c.totalPay(s,c.totals(s,month)[0]);
+s.payRates['1']={card:999,dawn:999};s.people[0].name='Changed later';
+assert.equal(c.payRate(s,'1','card'),520,'a closed month retains its pay rates');assert.equal(c.totalPay(s,c.totals(s,month)[0]),beforePay);
+assert.equal(c.monthPeople(s,month)[0].name,'น.ส.พฤกษา  ชาวไพร','a closed month retains its displayed roster');
+assert.equal(c.solve(s,month).reason,'closed');assert.equal(c.manualRange(s,month,'1',2,2,'M').ok,false);
+assert.throws(()=>p.status(closed,'paid',2000),/ยืนยัน/);closed=p.status(closed,'confirmed',2000);closed=p.status(closed,'paid',3000);assert.equal(closed.month.settlement.status,'paid');
+const opened=p.reopen(closed);assert(!opened.month.settlement);p.apply(s,opened);assert.equal(c.payRate(s,'1','card'),520,'reopening retains the frozen rate until explicitly updated');
+assert.throws(()=>p.validate({...data,key:'bad'}),/เดือน/);
+assert.throws(()=>p.validate({...data,month:{...data.month,cells:{'missing|1':{code:'N',block:'',locked:false}}}}),/ช่องเวร/);
+console.log('PASS planner model: monthly capture, immutable settlement rates/roster, statuses, reopening and validation');

@@ -446,9 +446,9 @@ async function main(){
    const body=JSON.parse(options.body);
    if(options.headers['if-match']!==String(syncCloud.revision))return reply(412,{});
    assert.equal(body.revision,syncCloud.revision+1);
-   syncCloud={revision:body.revision,records:JSON.parse(body.recordsJson)};return reply(200,body);
+   syncCloud={revision:body.revision,records:JSON.parse(body.recordsJson),historyJson:body.historyJson};return reply(200,body);
   }
-  return reply(200,syncCloud.revision?{version:1,revision:syncCloud.revision,recordsJson:JSON.stringify(syncCloud.records)}:null,String(syncCloud.revision));
+  return reply(200,syncCloud.revision?{version:1,revision:syncCloud.revision,recordsJson:JSON.stringify(syncCloud.records),historyJson:syncCloud.historyJson}:null,String(syncCloud.revision));
  };
  const tickSync=async(client,delay=600)=>{
   const timer=[...client.timers].find(([,value])=>value.delay===delay);
@@ -459,6 +459,7 @@ async function main(){
  assert.equal(syncCloud.records.length,0);assert.equal(JSON.parse(device1.storage.get(authKey)).dirty,true);
  await tickSync(device1);
  assert.equal(syncCloud.records[0].code,'A11');assert.equal(JSON.parse(device1.storage.get(authKey)).dirty,false);
+ assert.equal(JSON.parse(syncCloud.historyJson)[0].records.length,0,'first save archives the empty library');
  assert.equal(device1.$('modal').open,false,'background save must not open the account dialog');
  const device2=boot({fetch:syncFetch});authForm(device2);await device2.run('CodeLibrary.login()');
  assert.equal(JSON.parse(device2.storage.get(authKey)).records[0].code,'A11');
@@ -502,6 +503,8 @@ async function main(){
  assert.equal(syncCloud.records.length,0,'bulk deletion also syncs');
  const device4=boot({fetch:syncFetch});authForm(device4);await device4.run('CodeLibrary.login()');
  assert.equal(JSON.parse(device4.storage.get(authKey)).records.length,0);
+ const beforeBulkDelete=JSON.parse(syncCloud.historyJson).at(-1);assert.equal(beforeBulkDelete.records.length,4,'bulk deletion archives the old library');
+ device4.ctx.confirm=()=>true;await device4.run('CodeLibrary.history()');await device4.run('CodeLibrary.restoreHistory('+JSON.stringify(beforeBulkDelete.id)+')');assert.equal(syncCloud.records.length,4,'a second device restores cloud history');assert.equal(JSON.parse(syncCloud.historyJson).at(-1).records.length,0,'restoration archives the current empty version');
  // Previously unsent account data resumes on login; separate local-only records stay separate.
  syncCloud={revision:0,records:[]};
  const resumed=boot({fetch:syncFetch,storage:new Map([[authKey,serialized([row('P91')])],[LOCAL,serialized([row('L01')])]])});

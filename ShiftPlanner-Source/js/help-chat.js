@@ -191,6 +191,7 @@ function changeOutreachMonth(){
 }
 function submitOutreachDays(){
  if(!outreachChatOpen()||outreachChat.step!=='days')return;
+ if(typeof Planner!=='undefined'&&!Planner.guard(outreachChat.month))return;
  const raw=$('helpDays').value.trim();outreachChat.daysText=raw;
  let days,next;const action=currentChatAction();
  try{days=parseOutreachDays(raw,outreachChat.month);next=removingChatDays()?cancelMonthDays(state,outreachChat.month,days,action.code,outreachChat.pid):action.kind==='need'?shiftMonthWithDays(state,outreachChat.month,days,action.code):leaveMonthWithDays(state,outreachChat.month,outreachChat.pid,days,action.code)}catch(e){helpMessages.push({side:'user',text:raw},{side:'guide',text:e.message});renderHelpChat();return}

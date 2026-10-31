@@ -11,7 +11,7 @@ const Personnel=(()=>{
  function applyDirectory(){align();normalizeCalendarState(state);save();render();refreshStatus()}
  function accountDefaults(account,legacy){
   const base=PersonnelModel.defaults(SEED,account?.username||'');
-  if(legacy){for(const p of base.people){const old=legacy.people.find(v=>v.id===p.id);if(old){const next=PersonnelModel.person({...old,removedFrom:''});Object.assign(p,next);base.payRates[p.id]={card:payRate(legacy,p.id,'card'),dawn:payRate(legacy,p.id,'dawn')}}}}
+  if(legacy){for(const p of base.people){const old=legacy.people.find(v=>v.id===p.id);if(old){const next=PersonnelModel.person({...old,removedFrom:''});Object.assign(p,next);base.payRates[p.id]={card:payRate(legacy,p.id,'card',null),dawn:payRate(legacy,p.id,'dawn',null)}}}}
   return PersonnelModel.validate(base);
  }
  function switchAccount(account){
@@ -40,9 +40,11 @@ const Personnel=(()=>{
  }
  async function load(replace=false){
   if(!sync)return;const target=sync,targetEpoch=epoch;loading=true;notice='';refreshStatus();if(isOpen()){$('personnelSave').disabled=true;$('personnelForm').querySelector('fieldset').disabled=true}
-  try{await target.load(replace);if(targetEpoch!==epoch)return;loading=false;retries=0;applyDirectory();if(target.dirty)schedule(0)}
+  let success=false;
+  try{await target.load(replace);if(targetEpoch!==epoch)return;loading=false;retries=0;success=true;applyDirectory();if(target.dirty)schedule(0)}
   catch(e){if(targetEpoch!==epoch)return;loading=false;notice=e.message;refreshStatus();if(e.retryable&&retries<4)scheduleLoad()}
   if(isOpen())open(true);
+  return success;
  }
  function scheduleLoad(){clearTimeout(timer);timer=setTimeout(()=>load(false),Math.min(30000,3000*2**retries++))}
  function schedule(delay=650){clearTimeout(timer);if(!sync?.dirty||sync.blocked||!sync.ready)return;timer=setTimeout(flush,delay)}
@@ -148,7 +150,7 @@ const Personnel=(()=>{
   try{
    if(owner){if(!sync)throw Error('ยังโหลดบัญชีไม่ได้ กรุณาลองโหลดอีกครั้ง');sync.edit(draft)}
    else{const next=PersonnelModel.validate(draft);localStorage.setItem(LOCAL_PROFILE,JSON.stringify(next));profile=next}
-   activeMonth().excludedStaffIds=draft.people.filter(p=>!included.has(p.id)).map(p=>p.id);history=[];applyDirectory();closeModal();toast(owner?'บันทึกบุคลากรแล้ว กำลังส่งเข้าบัญชี':'บันทึกบุคลากรแล้ว');if(owner){awaitingNotice=true;schedule(0)}
+   activeMonth().excludedStaffIds=draft.people.filter(p=>!included.has(p.id)).map(p=>p.id);if(activeMonth().rosterSnapshot)activeMonth().rosterSnapshot=draft.people.filter(p=>!p.removedFrom).map(p=>({...p,photo:''}));history=[];applyDirectory();closeModal();toast(owner?'บันทึกบุคลากรแล้ว กำลังส่งเข้าบัญชี':'บันทึกบุคลากรแล้ว');if(owner){awaitingNotice=true;schedule(0)}
   }catch(e){$('personnelError').textContent=e.message}
  }
  function reload(){if(sync&&!photoBusy){if(loading||sync.task){toast('กำลังเชื่อมต่อบุคลากร กรุณารอสักครู่');return}const question=sync.dirty?'โหลดบุคลากรล่าสุด? ข้อมูลที่รอส่งและการแก้ไขในหน้านี้จะถูกแทนที่ด้วยข้อมูลออนไลน์':'โหลดบุคลากรล่าสุด? การแก้ไขที่ยังไม่กดบันทึกจะถูกยกเลิก';if(!confirm(question))return;draft=null;load(true)}}
@@ -158,5 +160,6 @@ const Personnel=(()=>{
  window.addEventListener('beforeunload',e=>{if(sync?.dirty){e.preventDefault();e.returnValue=''}});
  window.addEventListener('storage',e=>{if(owner&&e.key===ACCOUNT_PROFILE+owner.id){if(sync){sync.blocked=true;notice='บุคลากรถูกแก้ไขจากอีกแท็บ กรุณารีเฟรชก่อนแก้ไขต่อ';refreshStatus();if(isOpen())$('personnelSave').disabled=true}}});
  document.addEventListener('DOMContentLoaded',init);
- return {init,isReady:()=>initialized,open,align,select,search,add,remove,step,preset,preview,useSchedule,photo,clearPhoto,save:saveStaff,reload,flush};
+ async function refreshOnline(){if(!owner)return true;if(!sync||loading||photoBusy||isOpen()||sync.dirty||sync.blocked||sync.task)return false;return load(false)}
+ return {init,isReady:()=>initialized,isAccountReady:()=>!owner||!!sync?.ready&&!loading,refreshOnline,open,align,select,search,add,remove,step,preset,preview,useSchedule,photo,clearPhoto,save:saveStaff,reload,flush};
 })();

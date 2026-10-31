@@ -28,13 +28,14 @@ function calendarDemand(state,month){
  return{needs,regularDays,holidayDays,card,R,X,dawn:R+X,total:card+R+X};
 }
 function normalizeCalendarDemand(state,month){
+ if(state.months[month].settlement)return false;
  const m=state.months[month],demand=calendarDemand(state,month);let changed=m.calendarRules!==true||!!m.autoCapacity;
  for(const [d,need]of Object.entries(demand.needs)){if(CODES.some(code=>m.days[d].need[code]!==need[code]))changed=true;m.days[d].need=need}
  m.calendarRules=true;delete m.autoCapacity;return changed;
 }
 function cell(m,p,d){return m.cells[key(p,d)]||{code:'',block:'',locked:false}}
 function manualPeople(m){return new Set(Object.entries(m.cells).filter(([,c])=>c.code&&c.locked).map(([k])=>k.split('|')[0]))}
-function monthPeople(state,month){const excluded=new Set(state.months[month].excludedStaffIds||[]);return state.people.filter(p=>!excluded.has(p.id)&&(!p.removedFrom||month<p.removedFrom))}
+function monthPeople(state,month){const m=state.months[month],excluded=new Set(m.excludedStaffIds||[]),snapshot=m.settlement?.people||m.rosterSnapshot;return(snapshot||state.people).filter(p=>!excluded.has(p.id)&&(snapshot||!p.removedFrom||month<p.removedFrom)).map(p=>snapshot?{...p,photo:state.people.find(v=>v.id===p.id)?.photo||p.photo||''}:p)}
 function group(state,month){const included=month?new Set(monthPeople(state,month).map(p=>p.id)):null;return state.people.slice(1,4).filter(p=>!included||included.has(p.id)).map(p=>p.id)}
 function canUseSymbol(p,value){return value===''||p.id!=='9'||value==='X'}
 function eligibleOnDay(p,month,d,code){return p.active&&canUseSymbol(p,code)&&p.allowed.includes(code)}
@@ -103,8 +104,8 @@ function defaultDawnRate(person){
  if(/^พนักงาน/.test(role))return 50;
  return 0;
 }
-function payRate(state,id,category='card'){
- const rate=state.payRates?.[id],card=typeof rate==='number'?rate:(rate?.card??DEFAULT_PAY_RATES[id]??0);
+function payRate(state,id,category='card',month=state.selected){
+ const fixed=month&&(state.months?.[month]?.settlement?.rates||state.months?.[month]?.rateSnapshot),rate=fixed?.[id]??state.payRates?.[id],card=typeof rate==='number'?rate:(rate?.card??DEFAULT_PAY_RATES[id]??0);
  if(category==='card')return card;
  const fallback=defaultDawnRate(state.people.find(p=>p.id===id));
  if(!rate||typeof rate==='number')return fallback;
@@ -114,10 +115,10 @@ function payRate(state,id,category='card'){
 }
 function normalizePayRates(state){
  let changed=false;state.payRates=state.payRates||{};
- for(const p of state.people){const next={card:payRate(state,p.id,'card'),dawn:payRate(state,p.id,'dawn')};if(JSON.stringify(state.payRates[p.id])!==JSON.stringify(next)){state.payRates[p.id]=next;changed=true}}
+ for(const p of state.people){const next={card:payRate(state,p.id,'card',null),dawn:payRate(state,p.id,'dawn',null)};if(JSON.stringify(state.payRates[p.id])!==JSON.stringify(next)){state.payRates[p.id]=next;changed=true}}
  return changed;
 }
-function totalPay(state,t){return PAY_GROUPS.reduce((sum,g)=>sum+g.codes.reduce((count,code)=>count+t[code],0)*Math.round(payRate(state,t.id,g.id)*100),0)/100}
+function totalPay(state,t,month=state.selected){return PAY_GROUPS.reduce((sum,g)=>sum+g.codes.reduce((count,code)=>count+t[code],0)*Math.round(payRate(state,t.id,g.id,month)*100),0)/100}
 // Soft income priorities; permissions, leave, locks and explicit goals still win.
 function distributionPlan(state,month,options={}){
  const m=state.months[month],n=daysIn(month),people=monthPeople(state,month).filter(p=>p.active),roster=code=>people.filter(p=>canUseSymbol(p,code)&&p.allowed.includes(code)).map(p=>p.id);
@@ -349,6 +350,7 @@ function diversifySchedule(state,month,m,excl,random=Math.random){
  return m;
 }
 function solve(state,month,opts={}){
+ if(state.months[month].settlement)return{ok:false,reason:'closed',message:'เดือนนี้ปิดยอดแล้ว กรุณาเปิดแก้ไขก่อนจัดเวร'};
  const calendar=opts.calendar??state.months[month].calendarRules??false;
  if(calendar){state=clone(state);normalizeCalendarDemand(state,month)}
  const original=state.months[month], n=daysIn(month), people=monthPeople(state,month), included=new Set(people.map(p=>p.id)),distribution=opts.distribution??original.distributionRules??false;
@@ -563,6 +565,7 @@ function solve(state,month,opts={}){
 }
 // Validate a whole painted range before committing anything to the live state.
 function manualRange(state,month,id,start,end,value){
+ if(state.months[month].settlement)return{ok:false,reason:'closed',message:'เดือนนี้ปิดยอดแล้ว กรุณาเปิดแก้ไขก่อนลงเวร'};
  const p=state.people.find(p=>p.id===id),n=daysIn(month);
  if(!p||!Number.isInteger(start)||!Number.isInteger(end)||Math.min(start,end)<1||Math.max(start,end)>n||!['',...CODES,'OFF','VAC'].includes(value))return{ok:false,message:'เลือกคน วันที่ และชนิดเวรให้ถูกต้อง'};
  if(!monthPeople(state,month).some(person=>person.id===id))return{ok:false,message:'บุคลากรคนนี้ไม่ได้ลงตารางเดือนนี้'};

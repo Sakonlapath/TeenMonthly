@@ -32,21 +32,21 @@ function exportModel(s,month,csv=false){
    put('AI'+row,t.N+t.M+t.A,38,'COUNTIF(D'+row+':AH'+row+',"ด")+COUNTIF(D'+row+':AH'+row+',"ช")+COUNTIF(D'+row+':AH'+row+',"บ")');
    put('AJ'+row,t.R+t.X,101,'COUNTIF(D'+row+':AH'+row+',"ร")');
    put('AK'+row,t.total,101,'AI'+row+'+AJ'+row);
-   const cardRate=payRate(s,p.id,'card'),dawnRate=payRate(s,p.id,'dawn');
+   const cardRate=payRate(s,p.id,'card',month),dawnRate=payRate(s,p.id,'dawn',month);
    put('AM'+row,cardRate,0);put('AN'+row,dawnRate,0);put('AO'+row,'',0);
    // Hidden raw codes keep the two identically displayed R shifts separate.
    for(let d=1;d<=31;d++)put(excelColumn(d+43)+row,d<=n?cell(m,p.id,d).code:'',0);
    put('AP'+row,t.R,0,'COUNTIF(AR'+row+':BV'+row+',"R")');
    put('AQ'+row,t.X,0,'COUNTIF(AR'+row+':BV'+row+',"X")');
    const formula='ROUND(AI'+row+'*AM'+row+'+AJ'+row+'*AN'+row+',2)';
-   put('AL'+row,totalPay(s,t),EXPORT_TEMPLATE.styleIds.money,formula);
+   put('AL'+row,totalPay(s,t,month),EXPORT_TEMPLATE.styleIds.money,formula);
   }else for(const col of ['AI','AJ','AK','AL'])put(col+row,'');
  }
  const totalRow=19+shift,lastPerson=totalRow-1;
  put('AI'+totalRow,ts.reduce((sum,t)=>sum+t.N+t.M+t.A,0),147,'SUM(AI10:AI'+lastPerson+')');
  put('AJ'+totalRow,ts.reduce((sum,t)=>sum+t.R+t.X,0),147,'SUM(AJ10:AJ'+lastPerson+')');
  put('AK'+totalRow,ts.reduce((sum,t)=>sum+t.total,0),147,'SUM(AK10:AK'+lastPerson+')');
- put('AL'+totalRow,ts.reduce((sum,t)=>sum+Math.round(totalPay(s,t)*100),0)/100,EXPORT_TEMPLATE.styleIds.money,'SUM(AL10:AL'+lastPerson+')');
+ put('AL'+totalRow,ts.reduce((sum,t)=>sum+Math.round(totalPay(s,t,month)*100),0)/100,EXPORT_TEMPLATE.styleIds.money,'SUM(AL10:AL'+lastPerson+')');
  return{cells:data,month,n,people,shift,lastRow:29+shift};
 }
 function csvText(s,month){

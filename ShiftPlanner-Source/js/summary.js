@@ -3,7 +3,7 @@ const ShiftStats=(()=>{
  function build(s,month){
   const n=daysIn(month),m=s.months[month],needs=calendarDemand(s,month).needs;
   const people=monthPeople(s,month).map(p=>{
-   const row={id:p.id,name:p.name,plainName:p.plainName||p.name,role:p.role,photo:p.photo||'',rates:{card:payRate(s,p.id,'card'),dawn:payRate(s,p.id,'dawn')},total:0,hours:0,pay:0,OFF:0,VAC:0,regular:0,holiday:0,locked:0,freeDays:0,longestRun:0,days:[],byCode:Object.fromEntries(CODES.map(c=>[c,{count:0,hours:0,pay:0}]))};
+   const row={id:p.id,name:p.name,plainName:p.plainName||p.name,role:p.role,photo:p.photo||'',rates:{card:payRate(s,p.id,'card',month),dawn:payRate(s,p.id,'dawn',month)},total:0,hours:0,pay:0,OFF:0,VAC:0,regular:0,holiday:0,locked:0,freeDays:0,longestRun:0,days:[],byCode:Object.fromEntries(CODES.map(c=>[c,{count:0,hours:0,pay:0}]))};
    let run=0,cents=0;
    for(let d=1;d<=n;d++){
     const cellValue=cell(m,p.id,d),code=CODES.includes(cellValue.code)?cellValue.code:'',block=cellValue.block||'',holiday=!!m.days[d].holiday||[0,6].includes(weekday(month,d));let pay=0,hours=0;

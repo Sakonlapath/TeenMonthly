@@ -2,6 +2,21 @@
   "rules": {
     ".read": false,
     ".write": false,
+    "planners": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$month": {
+          ".write": "auth != null && auth.uid === $uid && newData.exists()",
+          ".validate": "$month.matches(/^(19[0-9]{2}|20[0-9]{2}|21[0-9]{2}|2200)-(0[1-9]|1[0-2])$/) && newData.hasChildren(['version', 'revision', 'dataJson', 'historyJson', 'updatedAt'])",
+          "version": { ".validate": "newData.isNumber() && newData.val() === 1" },
+          "revision": { ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() > 0 && newData.val() <= 9007199254740991 && ((!data.exists() && newData.val() === 1) || (data.exists() && newData.val() === data.val() + 1))" },
+          "dataJson": { ".validate": "newData.isString() && newData.val().length <= 1400000" },
+          "historyJson": { ".validate": "newData.isString() && newData.val().length <= 2600000" },
+          "updatedAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
     "personnel": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
@@ -33,6 +48,9 @@
           ".validate": "newData.isNumber() && newData.val() % 1 === 0 && newData.val() > 0 && newData.val() <= 9007199254740991 && ((!data.exists() && newData.val() === 1) || (data.exists() && newData.val() === data.val() + 1))"
         },
         "recordsJson": {
+          ".validate": "newData.isString() && newData.val().length <= 4500000"
+        },
+        "historyJson": {
           ".validate": "newData.isString() && newData.val().length <= 4500000"
         },
         "$other": {
